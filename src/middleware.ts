@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify, JWTPayload } from 'jose';
-import { processSecureRedirects } from './src/lib/routes/routing_security';
+import { processSecureRedirects } from '@/lib/routes/routing_security';
 
 // Environment variable used to verify Supabase JWTs. Must be set in your deployment.
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET || process.env.NEXT_PUBLIC_SUPABASE_JWT_SECRET || '';
