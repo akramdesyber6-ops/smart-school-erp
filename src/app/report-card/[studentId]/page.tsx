@@ -1,10 +1,16 @@
 'use client';
 
-import React from 'react';
+/**
+ * MODULE 2: Report Card Page - Client Component with Live Data Hydration
+ * Fetches student grade report from Supabase and passes to ReportCard component
+ */
+
+import React, { useEffect, useState } from 'react';
 import ReportCard from '@/components/ReportCard';
 import { StudentGradeReport, SchoolProfile } from '@/types/assessment';
+import { useStudentGradeReport } from '@/hooks/useStudentGradeReport';
 
-// Mock school profile
+// Mock school profile (could be fetched from config/database)
 const mockSchool: SchoolProfile = {
   name: 'ONWARDS AND UPWARDS SECONDARY SCHOOL - BULOBA',
   location: 'Buloba, Kampala, Uganda',
@@ -14,126 +20,93 @@ const mockSchool: SchoolProfile = {
   letterheadBgColor: 'bg-emerald-50',
 };
 
-// Mock student report
-const mockReport: StudentGradeReport = {
-  student: {
-    id: 'OU-STD-2026-0001',
-    firstName: 'John',
-    lastName: 'Okello',
-    stream: 'East',
-    class: 'Senior One',
-  },
-  class: 'Senior One',
-  term: 'Term 1 2026',
-  academicYear: '2026',
-  subjects: [
-    {
-      subjectId: 'AGR001',
-      subjectName: 'Agriculture',
-      teacherInitials: 'JM',
-      aoi1Score: 2.8,
-      aoi2Score: 2.5,
-      aoi3Score: 2.9,
-      eotScore: 2.7,
-      aoiKey: 'Soil conservation and crop production techniques',
-    },
-    {
-      subjectId: 'ENG001',
-      subjectName: 'English Language',
-      teacherInitials: 'SM',
-      aoi1Score: 2.5,
-      aoi2Score: 2.3,
-      aoi3Score: 2.6,
-      eotScore: 2.4,
-      aoiKey: 'Written and oral communication skills',
-    },
-    {
-      subjectId: 'MAT001',
-      subjectName: 'Mathematics',
-      teacherInitials: 'DK',
-      aoi1Score: 2.2,
-      aoi2Score: 2.0,
-      aoi3Score: 2.4,
-      eotScore: 2.1,
-      aoiKey: 'Algebraic and geometric problem solving',
-    },
-    {
-      subjectId: 'SCI001',
-      subjectName: 'Integrated Science',
-      teacherInitials: 'PN',
-      aoi1Score: 2.6,
-      aoi2Score: 2.7,
-      aoi3Score: 2.8,
-      eotScore: 2.9,
-      aoiKey: 'Scientific inquiry and experimental methodology',
-    },
-    {
-      subjectId: 'SOC001',
-      subjectName: 'Social Studies',
-      teacherInitials: 'RN',
-      aoi1Score: 2.9,
-      aoi2Score: 2.8,
-      aoi3Score: 2.7,
-      eotScore: 2.9,
-      aoiKey: 'Civic and historical understanding',
-    },
-  ],
-  classTeacherComment:
-    'John demonstrates excellent engagement in class activities. He shows strong leadership qualities and consistently completes assignments on time. Continue focusing on collaborative skills.',
-  headteacherComment:
-    'John has shown remarkable improvement in academic performance this term. His participation in school activities is commendable. Maintain this positive trajectory.',
-  classTeacherInitials: 'JM',
-  headteacherInitials: 'AK',
-  reportDate: new Date().toLocaleDateString('en-UG', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }),
-};
-
 interface ReportCardPageProps {
   params: {
     studentId: string;
   };
+  searchParams?: {
+    termId?: string;
+  };
 }
 
-export default function ReportCardPage({ params }: ReportCardPageProps) {
-  // In a real app, fetch the report based on params.studentId
-  // For now, using mock data
-
+/**
+ * Loading skeleton for report card
+ */
+function ReportCardSkeleton() {
   return (
-    <div className="min-h-screen bg-slate-100 py-8">
-      <div className="mx-auto max-w-4xl">
-        {/* Print and Download Controls */}
-        <div className="mb-6 flex gap-3 print:hidden">
-          <button
-            onClick={() => window.print()}
-            className="rounded-lg bg-emerald-700 px-6 py-2 font-semibold text-white shadow hover:bg-emerald-800 transition-colors"
-          >
-            🖨️ Print
-          </button>
-          <button
-            onClick={() => {
-              const element = document.getElementById('report-card');
-              if (element) {
-                // Trigger browser print dialog which can save as PDF
-                window.print();
-              }
-            }}
-            className="rounded-lg bg-blue-700 px-6 py-2 font-semibold text-white shadow hover:bg-blue-800 transition-colors"
-          >
-            📥 Save as PDF
-          </button>
-        </div>
+    <div className="mx-auto max-w-4xl space-y-6 p-8">
+      <div className="h-40 animate-pulse rounded-lg bg-slate-200"></div>
+      <div className="h-32 animate-pulse rounded-lg bg-slate-200"></div>
+      <div className="h-64 animate-pulse rounded-lg bg-slate-200"></div>
+      <div className="h-40 animate-pulse rounded-lg bg-slate-200"></div>
+    </div>
+  );
+}
 
-        {/* Report Card Component */}
-        <div
-          id="report-card"
-          className="rounded-lg shadow-lg print:rounded-none print:shadow-none"
-        >
-          <ReportCard report={mockReport} school={mockSchool} showQRCode={true} />
+/**
+ * Error display component
+ */
+function ErrorDisplay({ error, studentId }: { error: string; studentId: string }) {
+  return (
+    <div className="mx-auto max-w-4xl">
+      <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-6">
+        <h2 className="text-xl font-bold text-red-900">Unable to Load Report Card</h2>
+        <p className="mt-2 text-red-800">{error}</p>
+        <p className="mt-2 text-sm text-red-700">Student ID: <code className="font-mono">{studentId}</code></p>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700 transition-colors"
+          >
+            🔄 Retry
+          </button>
+          <a
+            href="/dashboard"
+            className="rounded-lg bg-slate-600 px-4 py-2 text-white hover:bg-slate-700 transition-colors"
+          >
+            ← Back to Dashboard
+          </a>
         </div>
       </div>
     </div>
   );
 }
+
+/**
+ * Main Report Card Page Component
+ */
+export default function ReportCardPage({ params, searchParams }: ReportCardPageProps) {
+  const { studentId } = params;
+  const termId = searchParams?.termId || 'current'; // Default to current term
+  const [isClient, setIsClient] = useState(false);
+
+  // Use the custom hook to fetch grade report
+  const { report, loading, error, refetch } = useStudentGradeReport({
+    studentId,
+    termId,
+  });
+
+  // Ensure we only render on client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return <ReportCardSkeleton />;
+  }
+
+  // Validate student ID format
+  if (!studentId || typeof studentId !== 'string' || studentId.trim().length === 0) {
+    return (
+      <div className=\"min-h-screen bg-slate-100 py-8\">
+        <ErrorDisplay
+          error=\"Invalid student ID provided\"
+          studentId={studentId || 'N/A'}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className=\"min-h-screen bg-slate-100 py-8 print:bg-white\">
+      {/* Print and Download Controls */}\n      <div className=\"mb-6 print:hidden\">\n        <div className=\"mx-auto max-w-4xl flex gap-3 px-4\">\n          <button\n            onClick={() => window.print()}\n            disabled={loading}\n            className=\"rounded-lg bg-emerald-700 px-6 py-2 font-semibold text-white shadow hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"\n          >\n            🖨️ Print\n          </button>\n          <button\n            onClick={() => window.print()}\n            disabled={loading}\n            className=\"rounded-lg bg-blue-700 px-6 py-2 font-semibold text-white shadow hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"\n          >\n            💾 Save as PDF\n          </button>\n          <button\n            onClick={refetch}\n            disabled={loading}\n            className=\"rounded-lg bg-slate-600 px-6 py-2 font-semibold text-white shadow hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"\n          >\n            🔄 Refresh\n          </button>\n          <a\n            href=\"/dashboard\"\n            className=\"rounded-lg bg-slate-500 px-6 py-2 font-semibold text-white shadow hover:bg-slate-600 transition-colors ml-auto\"\n          >\n            ← Back\n          </a>\n        </div>\n      </div>\n\n      {/* Loading State */}\n      {loading && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <ReportCardSkeleton />\n        </div>\n      )}\n\n      {/* Error State */}\n      {error && !loading && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <ErrorDisplay error={error} studentId={studentId} />\n        </div>\n      )}\n\n      {/* Success State - Report Card */}\n      {!loading && !error && report && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <div\n            id=\"report-card\"\n            className=\"rounded-lg shadow-lg print:rounded-none print:shadow-none\"\n          >\n            <ReportCard report={report} school={mockSchool} showQRCode={true} />\n          </div>\n        </div>\n      )}\n\n      {/* No Data State */}\n      {!loading && !error && !report && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <ErrorDisplay\n            error=\"No report card found for this student\"\n            studentId={studentId}\n          />\n        </div>\n      )}\n    </div>\n  );\n}\n
