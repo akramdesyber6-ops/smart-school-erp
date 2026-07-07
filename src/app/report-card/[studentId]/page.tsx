@@ -98,9 +98,9 @@ export default function ReportCardPage({ params, searchParams }: ReportCardPageP
   // Validate student ID format
   if (!studentId || typeof studentId !== 'string' || studentId.trim().length === 0) {
     return (
-      <div className=\"min-h-screen bg-slate-100 py-8\">
+      <div className="min-h-screen bg-slate-100 py-8">
         <ErrorDisplay
-          error=\"Invalid student ID provided\"
+          error="Invalid student ID provided"
           studentId={studentId || 'N/A'}
         />
       </div>
@@ -108,5 +108,75 @@ export default function ReportCardPage({ params, searchParams }: ReportCardPageP
   }
 
   return (
-    <div className=\"min-h-screen bg-slate-100 py-8 print:bg-white\">
-      {/* Print and Download Controls */}\n      <div className=\"mb-6 print:hidden\">\n        <div className=\"mx-auto max-w-4xl flex gap-3 px-4\">\n          <button\n            onClick={() => window.print()}\n            disabled={loading}\n            className=\"rounded-lg bg-emerald-700 px-6 py-2 font-semibold text-white shadow hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"\n          >\n            🖨️ Print\n          </button>\n          <button\n            onClick={() => window.print()}\n            disabled={loading}\n            className=\"rounded-lg bg-blue-700 px-6 py-2 font-semibold text-white shadow hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"\n          >\n            💾 Save as PDF\n          </button>\n          <button\n            onClick={refetch}\n            disabled={loading}\n            className=\"rounded-lg bg-slate-600 px-6 py-2 font-semibold text-white shadow hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors\"\n          >\n            🔄 Refresh\n          </button>\n          <a\n            href=\"/dashboard\"\n            className=\"rounded-lg bg-slate-500 px-6 py-2 font-semibold text-white shadow hover:bg-slate-600 transition-colors ml-auto\"\n          >\n            ← Back\n          </a>\n        </div>\n      </div>\n\n      {/* Loading State */}\n      {loading && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <ReportCardSkeleton />\n        </div>\n      )}\n\n      {/* Error State */}\n      {error && !loading && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <ErrorDisplay error={error} studentId={studentId} />\n        </div>\n      )}\n\n      {/* Success State - Report Card */}\n      {!loading && !error && report && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <div\n            id=\"report-card\"\n            className=\"rounded-lg shadow-lg print:rounded-none print:shadow-none\"\n          >\n            <ReportCard report={report} school={mockSchool} showQRCode={true} />\n          </div>\n        </div>\n      )}\n\n      {/* No Data State */}\n      {!loading && !error && !report && (\n        <div className=\"mx-auto max-w-4xl px-4\">\n          <ErrorDisplay\n            error=\"No report card found for this student\"\n            studentId={studentId}\n          />\n        </div>\n      )}\n    </div>\n  );\n}\n
+    <div className="min-h-screen bg-slate-100 py-8 print:bg-white">
+      {/* Print and Download Controls */}
+      <div className="mb-6 print:hidden">
+        <div className="mx-auto max-w-4xl flex gap-3 px-4">
+          <button
+            onClick={() => window.print()}
+            disabled={loading}
+            className="rounded-lg bg-emerald-700 px-6 py-2 font-semibold text-white shadow hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            🖨️ Print
+          </button>
+          <button
+            onClick={() => window.print()}
+            disabled={loading}
+            className="rounded-lg bg-blue-700 px-6 py-2 font-semibold text-white shadow hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            💾 Save as PDF
+          </button>
+          <button
+            onClick={refetch}
+            disabled={loading}
+            className="rounded-lg bg-slate-600 px-6 py-2 font-semibold text-white shadow hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            🔄 Refresh
+          </button>
+          <a
+            href="/dashboard"
+            className="rounded-lg bg-slate-500 px-6 py-2 font-semibold text-white shadow hover:bg-slate-600 transition-colors ml-auto"
+          >
+            ← Back
+          </a>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="mx-auto max-w-4xl px-4">
+          <ReportCardSkeleton />
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="mx-auto max-w-4xl px-4">
+          <ErrorDisplay error={error} studentId={studentId} />
+        </div>
+      )}
+
+      {/* Success State - Report Card */}
+      {!loading && !error && report && (
+        <div className="mx-auto max-w-4xl px-4">
+          <div
+            id="report-card"
+            className="rounded-lg shadow-lg print:rounded-none print:shadow-none"
+          >
+            <ReportCard report={report} school={mockSchool} showQRCode={true} />
+          </div>
+        </div>
+      )}
+
+      {/* No Data State */}
+      {!loading && !error && !report && (
+        <div className="mx-auto max-w-4xl px-4">
+          <ErrorDisplay
+            error="No report card found for this student"
+            studentId={studentId}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
