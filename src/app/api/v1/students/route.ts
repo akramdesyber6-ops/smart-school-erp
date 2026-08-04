@@ -1,28 +1,32 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServerSupabaseClient } from "@supabase/auth-helpers-nextjs"; // adjust import to your setup
+import { createServerClient } from "@/lib/supabase/server"; // Updated for Next.js 14
 import { StudentsService } from "@/services/students.service";
 import { createStudentSchema } from "@/lib/validations/students";
 import type { ApiResponse } from "@/lib/types/api";
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient({ req }); // adapt to your supabase server client factory
+    const supabase = await createServerClient();
     const { data: authData, error: authErr } = await supabase.auth.getUser();
+
     if (authErr || !authData.user) {
       const res: ApiResponse<null> = { success: false, error: "Unauthorized" };
       return NextResponse.json(res, { status: 401 });
     }
 
-    // fetch profile to determine school_id. Adjust if you store school_id in jwt claims instead.
+    // Fetch school_id from 'profiles' (tenant info)
     const { data: profile, error: profileErr } = await supabase
-      .from("users")
+      .from("profiles")
       .select("school_id")
       .eq("id", authData.user.id)
       .maybeSingle();
 
-    if (profileErr || !profile) {
-      const res: ApiResponse<null> = { success: false, error: "User profile not found or missing school_id" };
+    if (profileErr || !profile?.school_id) {
+      const res: ApiResponse<null> = {
+        success: false,
+        error: "Forbidden: No school tenant associated with this account",
+      };
       return NextResponse.json(res, { status: 403 });
     }
 
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient({ req });
+    const supabase = await createServerClient();
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData.user) {
       const res: ApiResponse<null> = { success: false, error: "Unauthorized" };
@@ -54,12 +58,12 @@ export async function GET(req: NextRequest) {
     }
 
     const { data: profile, error: profileErr } = await supabase
-      .from("users")
+      .from("profiles")
       .select("school_id")
       .eq("id", authData.user.id)
       .maybeSingle();
 
-    if (profileErr || !profile) {
+    if (profileErr || !profile?.school_id) {
       const res: ApiResponse<null> = { success: false, error: "User profile not found or missing school_id" };
       return NextResponse.json(res, { status: 403 });
     }
