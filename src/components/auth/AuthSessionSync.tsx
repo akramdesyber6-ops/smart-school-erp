@@ -1,11 +1,11 @@
 'use client';
 
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import useAuthStore, { type AuthProfile, type AuthSession } from '@/lib/stores/useAuthStore';
 
 type AuthSessionSyncProps = {
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export function AuthSessionSync({ children }: AuthSessionSyncProps): JSX.Element {
@@ -43,7 +43,7 @@ export function AuthSessionSync({ children }: AuthSessionSyncProps): JSX.Element
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      void synchronize();
+      window.setTimeout(() => void synchronize(), 0);
     });
 
     return () => subscription.unsubscribe();

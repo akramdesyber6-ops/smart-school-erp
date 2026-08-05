@@ -16,6 +16,7 @@
     "isolatedModules": true,
     "moduleResolution": "node",
     "allowJs": true,
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
