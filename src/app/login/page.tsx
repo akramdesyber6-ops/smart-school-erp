@@ -49,7 +49,18 @@ export default function LoginPage(): JSX.Element {
 
       if (profileError) {
         const message = profileError.message || 'Failed to fetch user profile.';
-        setError(message);
+        // Provide more actionable guidance when profile is missing or not provisioned
+        if (profileError.code === 'PGRST116' || profileError.message?.includes('No rows')) {
+          setError('No user profile found. Your authentication succeeded but your account is not yet provisioned in the school database. Please contact your administrator.');
+        } else {
+          setError(message + ' If this persists contact your administrator.');
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (!profile) {
+        setError('No user profile found. Your authentication succeeded but your account is not yet provisioned in the school database. Please contact your administrator.');
         setLoading(false);
         return;
       }
@@ -117,7 +128,7 @@ export default function LoginPage(): JSX.Element {
             <button
               type="submit"
               disabled={loading}
-              className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
