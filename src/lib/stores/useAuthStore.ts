@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Session } from '@supabase/supabase-js';
 
 export interface AuthProfile {
   id: string;
@@ -12,15 +13,7 @@ export interface AuthProfile {
   [key: string]: any;
 }
 
-export interface AuthSession {
-  user: {
-    id: string;
-    email?: string;
-    [key: string]: any;
-  };
-  access_token?: string;
-  [key: string]: any;
-}
+export type AuthSession = Session;
 
 export interface AuthStoreState {
   session: AuthSession | null;

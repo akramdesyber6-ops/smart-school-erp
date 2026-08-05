@@ -1,59 +1,41 @@
-/**
- * src/lib/routes/routing_security.ts
- * 
- * Centralized routing security logic for both server-side middleware
- * and client-side login/auth flows.
- */
+/** Centralized authentication navigation rules. */
 
-import type { JWTPayload } from 'jose';
+export type ApplicationRole = 'admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
 
 export type RouteContext = {
   pathname: string;
 };
 
-/**
- * Process secure redirects based on JWT payload and current route context.
- * 
- * This function is used by both the middleware (server-side) and login page (client-side)
- * to determine where a user should be routed based on their authentication state and roles.
- * 
- * @param payload - Decoded JWT payload (null if unauthenticated)
- * @param context - Current route context (pathname)
- * @returns Redirect path if routing should be enforced, null/undefined otherwise
- */
+const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
+
+export function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTE_PREFIXES.some(
+    (route) => pathname === route || (route !== '/' && pathname.startsWith(`${route}/`))
+  );
+}
+
+export function getDashboardPathForRole(role: unknown): string {
+  if (role === 'admin' || role === 'school_admin') return '/dashboards/school-admin';
+  if (role === 'teacher') return '/dashboards/teacher';
+
+  // Student and parent portals are not implemented yet. Keep them on the public
+  // landing page instead of navigating them to a route that does not exist.
+  return '/';
+}
+
+function getRoles(payload: Record<string, unknown>): string[] {
+  const roleClaims = [payload.role, payload.roles, payload['x-hasura-allowed-roles']];
+  return roleClaims.flatMap((claim) => (Array.isArray(claim) ? claim : typeof claim === 'string' ? [claim] : []));
+}
+
 export async function processSecureRedirects(
-  payload: JWTPayload | Record<string, any> | null,
+  payload: Record<string, unknown> | null,
   context: RouteContext
-): Promise<string | null | undefined> {
-  // If no payload (unauthenticated), redirect to login for protected routes
-  if (!payload) {
-    // Allow public routes like /login, /forgot-password, etc.
-    const publicRoutes = ['/login', '/forgot-password', '/signup'];
-    if (publicRoutes.some((route) => context.pathname.startsWith(route))) {
-      return null; // Allow access to public routes
-    }
-    return '/login'; // Redirect to login for all other routes
-  }
+): Promise<string | null> {
+  if (!payload) return isPublicRoute(context.pathname) ? null : '/login';
 
-  // Extract roles from payload (try multiple common patterns)
-  const roles = (payload?.role || payload?.roles || payload?.['x-hasura-allowed-roles'] || []) as string[];
+  const destination = getDashboardPathForRole(getRoles(payload)[0]);
+  if (context.pathname === '/' || context.pathname === '/login') return destination === '/' ? null : destination;
 
-  // If authenticated, check role-based routing
-  // Example: admins go to /admin, teachers to /teacher-dashboard, students to /dashboard
-  if (roles.includes('admin')) {
-    if (!context.pathname.startsWith('/admin')) {
-      return '/admin';
-    }
-  } else if (roles.includes('teacher')) {
-    if (!context.pathname.startsWith('/teacher-dashboard')) {
-      return '/teacher-dashboard';
-    }
-  } else if (roles.includes('student')) {
-    if (!context.pathname.startsWith('/dashboard')) {
-      return '/dashboard';
-    }
-  }
-
-  // Default: no redirect needed, allow the request
   return null;
 }

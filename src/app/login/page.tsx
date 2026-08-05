@@ -2,31 +2,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import useAuthStore from '@/lib/stores/useAuthStore';
 import { processSecureRedirects } from '@/lib/routes/routing_security';
 
-// Ensure you have NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY set in your environment.
-const NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-if (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  // We do not throw here since this file might be statically analyzed. Instead, we will guard at runtime.
-}
-
-function getSupabaseClient(): SupabaseClient {
-  return createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    auth: { persistSession: true }
-  });
-}
-
-type AuthError = {
-  message: string;
-};
-
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
-  const setSession = useAuthStore((s: any) => s.setSession);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,11 +19,7 @@ export default function LoginPage(): JSX.Element {
     setError(null);
     setLoading(true);
     try {
-      if (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        throw new Error('Supabase client not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
-      }
-
-      const supabase = getSupabaseClient();
+      const supabase = createClientComponentClient();
 
       const {
         data: signInData,
@@ -67,7 +44,7 @@ export default function LoginPage(): JSX.Element {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', session.user.id)
+        .eq('user_id', session.user.id)
         .single();
 
       if (profileError) {

@@ -1,20 +1,10 @@
 // src/lib/supabase/api.ts
 // Strongly-typed Supabase API client wrapper and helper query functions
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Environment variables expected at runtime. For server-side operations prefer using a service role key stored securely.
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // Fail fast if environment is incorrectly configured on server-side builds.
-  // In client-side builds these values should be present as NEXT_PUBLIC_* vars.
-  // eslint-disable-next-line no-console
-  console.warn('Supabase environment variables are not fully configured. Ensure SUPABASE_URL and SUPABASE_ANON_KEY are set.');
-}
-
-export const supabase: SupabaseClient = createClient(SUPABASE_URL || '', SUPABASE_ANON_KEY || '');
+export const supabase: SupabaseClient = createClientComponentClient();
 
 // ----------------------
 // Types
@@ -166,32 +156,10 @@ export async function getMarkbookEntries({ classId, termId, subjectId }: { class
   }
 }
 
-// Example of a protected write using server-side service role (recommended on backend only)
-export async function upsertMarkbookEntryAsServiceRole(entry: Partial<MarkbookEntryRow> & { id?: string }) {
-  try {
-    // This wrapper expects the server environment to set a SUPABASE_SERVICE_ROLE_KEY and create a service client.
-    // We create it here lazily if the key exists; otherwise return an error to avoid accidental exposure.
-    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!SERVICE_KEY) {
-      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured. Server-side service role is required for this operation.');
-    }
-
-    const serviceClient = createClient(SUPABASE_URL || '', SERVICE_KEY);
-
-    const { data, error } = await serviceClient.from('markbook_entries').upsert(entry).select();
-    if (error) throw error;
-
-    return { data, error: null };
-  } catch (err: any) {
-    return { data: null, error: { message: err.message || String(err), original: err } };
-  }
-}
-
 // Export default for convenience
 export default {
   supabase,
   getClassesAndSubjectsForCurrentSchool,
   getEnrollmentRoster,
   getMarkbookEntries,
-  upsertMarkbookEntryAsServiceRole,
 };
