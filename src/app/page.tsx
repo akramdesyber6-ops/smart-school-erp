@@ -11,65 +11,13 @@ import {
   CheckCircle,
   Zap,
   Shield,
-  ChevronDown,
-  ChevronUp,
-  Code,
-  Copy,
-  Eye,
-  EyeOff,
   ArrowRight,
 } from 'lucide-react';
-
-interface TestAccount {
-  name: string;
-  role: string;
-  email: string;
-  password: string;
-  description: string;
-}
-
-const TEST_ACCOUNTS: TestAccount[] = [
-  {
-    name: 'Grace Kiggundu',
-    role: 'School Admin',
-    email: 'grace.admin@kampalaelite.ug',
-    password: 'DemoPass123!',
-    description: 'Full school administrative access. Manage users, classes, streams, and reports.',
-  },
-  {
-    name: 'Robert Mukuka',
-    role: 'CBC Teacher',
-    email: 'robert.mukuka@kampalaelite.ug',
-    password: 'DemoPass123!',
-    description: 'Teach Senior 1 (CBC). Input competency scores, lesson plans, observations.',
-  },
-  {
-    name: 'Dr. Patrick Ouma',
-    role: 'NCDC Teacher',
-    email: 'patrick.ouma@kampalaelite.ug',
-    password: 'DemoPass123!',
-    description: 'Teach Senior 5 (NCDC). Input BOT/MOT/EOT marks, automated Ugandan grading.',
-  },
-  {
-    name: 'Amina Ssekandi',
-    role: 'Student (CBC)',
-    email: 'amina.student@kampalaelite.ug',
-    password: 'DemoPass123!',
-    description: 'View grades, competency feedback, attendance, lesson materials.',
-  },
-];
-
-interface CopyState {
-  [key: string]: boolean;
-}
 
 export default function LandingPage(): JSX.Element {
   const router = useRouter();
   const { profile, activeSchoolId } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
-  const [sandboxOpen, setSandboxOpen] = useState(false);
-  const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
-  const [copied, setCopied] = useState<CopyState>({});
 
   // Session Detection & Auto-Redirect
   useEffect(() => {
@@ -106,27 +54,6 @@ export default function LandingPage(): JSX.Element {
       </div>
     );
   }
-
-  const togglePasswordVisibility = (email: string) => {
-    setShowPasswords((prev) => ({
-      ...prev,
-      [email]: !prev[email],
-    }));
-  };
-
-  const copyToClipboard = (text: string, identifier: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied((prev) => ({
-      ...prev,
-      [identifier]: true,
-    }));
-    setTimeout(() => {
-      setCopied((prev) => ({
-        ...prev,
-        [identifier]: false,
-      }));
-    }, 2000);
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
