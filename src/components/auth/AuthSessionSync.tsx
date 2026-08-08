@@ -29,6 +29,7 @@ export function AuthSessionSync({ children }: AuthSessionSyncProps): JSX.Element
         .from('profiles')
         .select('id, user_id, school_id, role, first_name, last_name, email')
         .eq('user_id', session.user.id)
+        .eq('is_active', true)
         .maybeSingle();
 
       if (profile) {

@@ -45,6 +45,7 @@ export default function LoginPage(): JSX.Element {
         .from('profiles')
         .select('*')
         .eq('user_id', session.user.id)
+        .eq('is_active', true)
         .single();
 
       if (profileError) {

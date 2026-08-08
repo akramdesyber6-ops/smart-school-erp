@@ -7,6 +7,10 @@ export type RouteContext = {
 };
 
 const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
+const ROLE_RESTRICTED_ROUTES: ReadonlyArray<{ prefix: string; allowedRoles: readonly ApplicationRole[] }> = [
+  { prefix: '/dashboards/school-admin', allowedRoles: ['admin', 'school_admin'] },
+  { prefix: '/dashboards/teacher', allowedRoles: ['admin', 'teacher'] },
+];
 
 export function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTE_PREFIXES.some(
@@ -23,9 +27,22 @@ export function getDashboardPathForRole(role: unknown): string {
   return '/';
 }
 
-function getRoles(payload: Record<string, unknown>): string[] {
+export function getRoles(payload: Record<string, unknown>): ApplicationRole[] {
   const roleClaims = [payload.role, payload.roles, payload['x-hasura-allowed-roles']];
-  return roleClaims.flatMap((claim) => (Array.isArray(claim) ? claim : typeof claim === 'string' ? [claim] : []));
+  const applicationRoles: ApplicationRole[] = ['admin', 'school_admin', 'teacher', 'student', 'parent'];
+
+  return roleClaims.flatMap((claim) => {
+    const values = Array.isArray(claim) ? claim : typeof claim === 'string' ? [claim] : [];
+    return values.filter((value): value is ApplicationRole => applicationRoles.includes(value as ApplicationRole));
+  });
+}
+
+export function canAccessRoute(roles: readonly ApplicationRole[], pathname: string): boolean {
+  const restriction = ROLE_RESTRICTED_ROUTES.find(
+    ({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+
+  return !restriction || restriction.allowedRoles.some((role) => roles.includes(role));
 }
 
 export async function processSecureRedirects(

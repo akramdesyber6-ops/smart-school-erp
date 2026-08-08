@@ -1,125 +1,176 @@
--- supabase/policies/01_tenant_isolation.sql
--- Purpose: Multi-tenant, recursion-safe RLS helpers and policies for core tables.
--- Notes:
---  - Uses JWT claims propagated by Supabase to identify the current user's school (tenant).
---  - Security-definer functions are intentionally immutable/stable to avoid recursive RLS evaluation.
---  - Adjust claim keys ("school_id", "role", "user_id") if your project uses different names.
+-- Supabase RLS baseline for Smart School ERP.
+-- Apply after the schema migration that creates the referenced tables.
+-- Roles are read from the active profile for the authenticated auth.uid().
 
--- Create a dedicated schema for policy helper functions
 create schema if not exists policies;
 
--- Safety: ensure the schema owner is the postgres superuser or a role with privileges required by SECURITY DEFINER usage.
-set search_path = policies,public;
-
--- Returns the current request's JWT claims as JSON (or NULL if not present)
-create or replace function policies._jwt_claims() returns jsonb
-language sql stable security definer as $$
-  select coalesce(current_setting('request.jwt.claims', true)::jsonb, '{}'::jsonb);
+create or replace function policies.current_school_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select p.school_id
+  from public.profiles p
+  where p.user_id = auth.uid()
+    and p.is_active = true
+  limit 1;
 $$;
 
--- Extract the current school_id from the JWT claims and cast to uuid
-create or replace function policies.current_school_id() returns uuid
-language sql stable security definer as $$
-  select nullif((policies._jwt_claims() ->> 'school_id'), '')::uuid;
+create or replace function policies.current_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select p.role
+  from public.profiles p
+  where p.user_id = auth.uid()
+    and p.is_active = true
+  limit 1;
 $$;
 
--- Extract the current user id from the JWT claims
-create or replace function policies.current_user_id() returns uuid
-language sql stable security definer as $$
-  select nullif((policies._jwt_claims() ->> 'user_id'), '')::uuid;
+create or replace function policies.is_service_role()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select auth.role() = 'service_role';
 $$;
 
--- Is the request coming from a service role (server-side privileged token)?
-create or replace function policies.is_service_role() returns boolean
-language sql stable security definer as $$
-  select (policies._jwt_claims() ->> 'role') = 'service_role';
+create or replace function policies.can_access_school(target_school_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select policies.is_service_role()
+    or (auth.uid() is not null and policies.current_school_id() = target_school_id);
 $$;
 
--- Lightweight authorization check used by RLS policies. It avoids querying other tables so it doesn't introduce recursion.
--- Use this for simple checks where the tenant id is provided directly on the row (e.g. a "school_id" column).
-create or replace function policies.allowed_school(target_school uuid) returns boolean
-language sql stable security definer as $$
-  -- Allow if service role OR the request's school_id matches the target_school
-  select
-    (policies.is_service_role())
+create or replace function policies.is_school_admin(target_school_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select policies.is_service_role()
     or (
-      policies.current_school_id() is not null and policies.current_school_id() = target_school
+      auth.uid() is not null
+      and policies.current_school_id() = target_school_id
+      and policies.current_role() in ('admin', 'school_admin')
     );
 $$;
 
--- Utility: guard to ensure there is an authenticated user in normal contexts
-create or replace function policies.require_authenticated_user() returns boolean
-language sql stable security definer as $$
-  select
-    policies.is_service_role()
-    or (policies.current_user_id() is not null);
+-- Tables with a direct school_id use a uniform least-privilege policy:
+-- active members may read their tenant; only school administrators may mutate it.
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'academic_years', 'academic_terms', 'attendance', 'classes', 'enrollments',
+    'markbook_entries', 'parents', 'students', 'subjects'
+  ] loop
+    if to_regclass(format('public.%I', table_name)) is not null then
+      execute format('alter table public.%I enable row level security', table_name);
+      execute format('drop policy if exists %I on public.%I', format('erp_%s_read', table_name), table_name);
+      execute format('drop policy if exists %I on public.%I', format('erp_%s_write', table_name), table_name);
+      execute format(
+        'create policy %I on public.%I for select using (policies.can_access_school(school_id))',
+        format('erp_%s_read', table_name),
+        table_name
+      );
+      execute format(
+        'create policy %I on public.%I for all using (policies.is_school_admin(school_id)) with check (policies.is_school_admin(school_id))',
+        format('erp_%s_write', table_name),
+        table_name
+      );
+    end if;
+  end loop;
+end;
 $$;
 
--- ==================================================================
--- Enable RLS and create policies for tenant isolation on core tables
--- ==================================================================
+do $$
+begin
+  if to_regclass('public.schools') is not null then
+    alter table public.schools enable row level security;
+    drop policy if exists erp_schools_read on public.schools;
+    drop policy if exists erp_schools_write on public.schools;
+    create policy erp_schools_read on public.schools
+      for select using (policies.can_access_school(id));
+    create policy erp_schools_write on public.schools
+      for all using (policies.is_school_admin(id)) with check (policies.is_school_admin(id));
+  end if;
 
--- 1) schools
--- Allow read access for users only to the school that matches their tenant or for service role.
-alter table if exists public.schools enable row level security;
+  if to_regclass('public.profiles') is not null then
+    alter table public.profiles enable row level security;
+    drop policy if exists erp_profiles_read on public.profiles;
+    drop policy if exists erp_profiles_write on public.profiles;
+    create policy erp_profiles_read on public.profiles
+      for select using (user_id = auth.uid() or policies.is_school_admin(school_id));
+    create policy erp_profiles_write on public.profiles
+      for all using (policies.is_school_admin(school_id)) with check (policies.is_school_admin(school_id));
+  end if;
 
-create policy if not exists "tenant_isolation_read_schools" on public.schools
-  for select using (policies.allowed_school(id));
+  if to_regclass('public.class_subjects') is not null then
+    alter table public.class_subjects enable row level security;
+    drop policy if exists erp_class_subjects_read on public.class_subjects;
+    drop policy if exists erp_class_subjects_write on public.class_subjects;
+    create policy erp_class_subjects_read on public.class_subjects
+      for select using (
+        exists (
+          select 1 from public.classes c
+          where c.id = class_subjects.class_id and policies.can_access_school(c.school_id)
+        )
+      );
+    create policy erp_class_subjects_write on public.class_subjects
+      for all using (
+        exists (
+          select 1 from public.classes c
+          where c.id = class_subjects.class_id and policies.is_school_admin(c.school_id)
+        )
+      ) with check (
+        exists (
+          select 1 from public.classes c
+          where c.id = class_subjects.class_id and policies.is_school_admin(c.school_id)
+        )
+      );
+  end if;
 
-create policy if not exists "tenant_isolation_modify_schools" on public.schools
-  for all using (policies.allowed_school(id)) with check (policies.allowed_school(coalesce(new.id, id)));
+  if to_regclass('public.student_parents') is not null then
+    alter table public.student_parents enable row level security;
+    drop policy if exists erp_student_parents_read on public.student_parents;
+    drop policy if exists erp_student_parents_write on public.student_parents;
+    create policy erp_student_parents_read on public.student_parents
+      for select using (
+        exists (
+          select 1 from public.students s
+          where s.id = student_parents.student_id and policies.can_access_school(s.school_id)
+        )
+      );
+    create policy erp_student_parents_write on public.student_parents
+      for all using (
+        exists (
+          select 1 from public.students s
+          where s.id = student_parents.student_id and policies.is_school_admin(s.school_id)
+        )
+      ) with check (
+        exists (
+          select 1 from public.students s
+          where s.id = student_parents.student_id and policies.is_school_admin(s.school_id)
+        )
+      );
+  end if;
+end;
+$$;
 
--- 2) profiles (user profiles belonging to a school)
-alter table if exists public.profiles enable row level security;
-
-create policy if not exists "tenant_isolation_select_profiles" on public.profiles
-  for select using (policies.allowed_school(school_id));
-
-create policy if not exists "tenant_isolation_insert_profiles" on public.profiles
-  for insert with check (policies.allowed_school(new.school_id) and policies.require_authenticated_user());
-
-create policy if not exists "tenant_isolation_update_profiles" on public.profiles
-  for update using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
-
-create policy if not exists "tenant_isolation_delete_profiles" on public.profiles
-  for delete using (policies.allowed_school(school_id));
-
--- 3) academic_terms
-alter table if exists public.academic_terms enable row level security;
-
-create policy if not exists "tenant_isolation_terms" on public.academic_terms
-  for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
-
--- 4) classes
-alter table if exists public.classes enable row level security;
-
-create policy if not exists "tenant_isolation_classes" on public.classes
-  for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
-
--- 5) enrollments
-alter table if exists public.enrollments enable row level security;
-
-create policy if not exists "tenant_isolation_enrollments" on public.enrollments
-  for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
-
--- 6) markbook_entries
-alter table if exists public.markbook_entries enable row level security;
-
-create policy if not exists "tenant_isolation_markbook_entries" on public.markbook_entries
-  for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
-
--- ==================================================================
--- Helpful additional policy: allow authenticated users to access their own profile
--- ==================================================================
-create policy if not exists "self_profile_access" on public.profiles
-  for select using (policies.is_service_role() or (profiles.user_id = policies.current_user_id()));
-
--- ==================================================================
--- Notes & migration guidance
--- ==================================================================
--- 1) If your JWT claim keys differ (e.g. using "tenant_id" instead of "school_id"), update the policies._jwt_claims() accessors.
--- 2) If you need to authorize by group/role membership that requires joins, create a dedicated, RLS-exempt helper table
---    (populated by a trusted background job) and reference it in the security-definer functions to avoid recursive queries.
--- 3) Test these policies thoroughly in a staging environment. Use a service_role key to bypass RLS for administrative operations when needed.
-
--- End of file
+revoke all on all functions in schema policies from public;
+grant usage on schema policies to authenticated, service_role;
+grant execute on all functions in schema policies to authenticated, service_role;
