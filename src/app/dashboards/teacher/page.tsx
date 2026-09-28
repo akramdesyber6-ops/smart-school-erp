@@ -16,12 +16,14 @@ import {
   Save,
 } from 'lucide-react';
 
-interface TeacherClass {
-  id: string;
-  name: string;
+interface TeacherClassSubject {
+  classId: string;
+  className: string;
   stream: string | null;
   curriculum: string;
-  school_id: string;
+  subjectId: string;
+  subjectName: string;
+  schoolId: string;
 }
 
 interface StudentEnrollment {
@@ -45,6 +47,8 @@ interface MarkbookEntry {
   subject_id: string;
   term_id: string;
   school_id: string;
+  teacher_id?: string;
+  marked_at?: string | null;
   raw_score?: number | null;
   bot_score?: number | null; // Beginning of Term
   mot_score?: number | null; // Middle of Term
@@ -55,6 +59,11 @@ interface MarkbookEntry {
   competency_code?: string | null;
   competency_score?: number | null; // 1, 2, or 3 for CBC
   observation?: string | null;
+}
+
+interface AcademicTerm {
+  id: string;
+  name: string;
 }
 
 interface LessonPlan {
@@ -117,8 +126,9 @@ export default function TeacherDashboard(): JSX.Element {
   const { profile, activeSchoolId } = useAuthStore();
 
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [classes, setClasses] = useState<TeacherClass[]>([]);
-  const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
+  const [classSubjects, setClassSubjects] = useState<TeacherClassSubject[]>([]);
+  const [selectedAssignment, setSelectedAssignment] = useState<TeacherClassSubject | null>(null);
+  const [currentTerm, setCurrentTerm] = useState<AcademicTerm | null>(null);
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
   const [markbookData, setMarkbookData] = useState<Map<string, MarkbookEntry>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -151,20 +161,61 @@ export default function TeacherDashboard(): JSX.Element {
       setIsAuthorized(true);
 
       try {
-        // Fetch classes assigned to this teacher
-        const { data: classesData, error: classesError } = await supabase
-          .from('classes')
-          .select('id, name, stream, school_id, curriculum')
+        // Fetch current academic term
+        const { data: termData, error: termError } = await supabase
+          .from('academic_terms')
+          .select('id, name')
           .eq('school_id', activeSchoolId)
-          .order('name', { ascending: true });
+          .eq('is_current', true)
+          .single();
 
-        if (classesError && classesError.code !== 'PGRST116') throw classesError;
-        const fetchedClasses = (classesData as any[]) || [];
-        setClasses(fetchedClasses);
-
-        if (fetchedClasses.length > 0) {
-          setSelectedClass(fetchedClasses[0]);
+        if (termError && termError.code !== 'PGRST116') {
+          throw termError;
         }
+
+        if (!termData) {
+          setError('Current academic term has not been configured. Please contact your administrator.');
+          setLoading(false);
+          return;
+        }
+
+        setCurrentTerm(termData);
+
+        // Fetch teacher's class-subject assignments
+        const { data: assignmentsData, error: assignmentsError } = await supabase
+          .from('class_subjects')
+          .select(`
+            class_id,
+            subject_id,
+            classes!inner(id, name, stream, school_id, curriculum),
+            subjects!inner(id, name, code)
+          `)
+          .eq('teacher_id', profile.id)
+          .eq('classes.school_id', activeSchoolId)
+          .order('classes.name', { ascending: true });
+
+        if (assignmentsError && assignmentsError.code !== 'PGRST116') {
+          throw assignmentsError;
+        }
+
+        const fetchedAssignments = (assignmentsData || []).map((cs: any) => ({
+          classId: cs.class_id,
+          className: cs.classes.name,
+          stream: cs.classes.stream,
+          curriculum: cs.classes.curriculum,
+          subjectId: cs.subject_id,
+          subjectName: cs.subjects.name,
+          schoolId: cs.classes.school_id,
+        }));
+
+        if (fetchedAssignments.length === 0) {
+          setError('You currently have no class or subject assignments. Please contact your administrator if you believe this is incorrect.');
+          setLoading(false);
+          return;
+        }
+
+        setClassSubjects(fetchedAssignments);
+        setSelectedAssignment(fetchedAssignments[0]);
       } catch (err: any) {
         console.error('Dashboard load error:', err);
         setError(err?.message || 'Failed to load teacher dashboard.');
@@ -176,10 +227,10 @@ export default function TeacherDashboard(): JSX.Element {
     checkAuthAndLoad();
   }, [profile, activeSchoolId, router]);
 
-  // Load enrollments when class changes
+  // Load enrollments when assignment changes
   useEffect(() => {
     const loadEnrollments = async () => {
-      if (!selectedClass || !activeSchoolId) return;
+      if (!selectedAssignment || !activeSchoolId || !currentTerm) return;
       setLoading(true);
       setMarkbookData(new Map());
       try {
@@ -188,18 +239,21 @@ export default function TeacherDashboard(): JSX.Element {
           .select(
             'id, student_id, class_id, term_id, status, students!inner(id, first_name, last_name, registration_number)'
           )
-          .eq('class_id', selectedClass.id)
+          .eq('class_id', selectedAssignment.classId)
+          .eq('term_id', currentTerm.id)
           .eq('school_id', activeSchoolId)
           .order('students.first_name', { ascending: true });
 
         if (enrollmentsError && enrollmentsError.code !== 'PGRST116') throw enrollmentsError;
         setEnrollments((enrollmentsData || []) as StudentEnrollment[]);
 
-        // Load existing markbook entries
+        // Load existing markbook entries for this class/subject/term combination
         const { data: markbookData, error: markbookError } = await supabase
           .from('markbook_entries')
           .select('*')
-          .eq('class_id', selectedClass.id)
+          .eq('class_id', selectedAssignment.classId)
+          .eq('subject_id', selectedAssignment.subjectId)
+          .eq('term_id', currentTerm.id)
           .eq('school_id', activeSchoolId);
 
         if (markbookError && markbookError.code !== 'PGRST116') throw markbookError;
@@ -216,7 +270,7 @@ export default function TeacherDashboard(): JSX.Element {
     };
 
     loadEnrollments();
-  }, [selectedClass, activeSchoolId]);
+  }, [selectedAssignment, activeSchoolId, currentTerm]);
 
   // Calculate total percentage for NCDC
   const calculateNcdcTotal = (bot: number | null, mot: number | null, eot: number | null): number | null => {
@@ -226,27 +280,32 @@ export default function TeacherDashboard(): JSX.Element {
 
   // Save markbook entry
   const saveMarkbookEntry = async (studentId: string, entry: MarkbookEntry) => {
-    if (!selectedClass || !activeSchoolId) return;
+    if (!selectedAssignment || !activeSchoolId || !currentTerm || !profile?.id) {
+      setError('Missing required context for saving grades.');
+      return;
+    }
     setSaving(true);
     try {
       const entryToSave = {
         student_id: studentId,
-        class_id: selectedClass.id,
-        subject_id: 'default-subject',
-        term_id: 'current-term',
+        class_id: selectedAssignment.classId,
+        subject_id: selectedAssignment.subjectId,
+        term_id: currentTerm.id,
         school_id: activeSchoolId,
+        teacher_id: profile.id,
+        marked_at: new Date().toISOString(),
         ...entry,
       };
 
       // For CBC, save competency score and observation
-      if (selectedClass.curriculum === 'CBC') {
+      if (selectedAssignment.curriculum === 'CBC') {
         const { error: err } = await supabase.from('markbook_entries').upsert(
           {
             ...entryToSave,
             competency_score: entry.competency_score,
             observation: entry.observation,
           },
-          { onConflict: 'student_id,class_id' }
+          { onConflict: 'student_id,class_id,subject_id,term_id' }
         );
         if (err) throw err;
       } else {
@@ -263,18 +322,23 @@ export default function TeacherDashboard(): JSX.Element {
             grade: grade,
             raw_score: total ? Math.round(total) : null,
           },
-          { onConflict: 'student_id,class_id' }
+          { onConflict: 'student_id,class_id,subject_id,term_id' }
         );
         if (err) throw err;
       }
 
       const updated = new Map(markbookData);
-      updated.set(studentId, entry);
+      updated.set(studentId, entryToSave);
       setMarkbookData(updated);
       setSuccess('Grades saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save grades.');
+      console.error('Save error:', err);
+      if (err?.code === '23503') {
+        setError('Invalid subject or term assignment. Please refresh and try again.');
+      } else {
+        setError(err?.message || 'Unable to save marks. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -315,7 +379,7 @@ export default function TeacherDashboard(): JSX.Element {
       setError('Please fill in both subject and topic.');
       return;
     }
-    const curriculum = selectedClass?.curriculum || 'CBC';
+    const curriculum = selectedAssignment?.curriculum || 'CBC';
     const plan = generateAiLessonPlan(lessonSubject, lessonTopic, curriculum);
     setLessonPlan(plan);
     setSuccess('Lesson plan generated successfully!');
@@ -327,7 +391,7 @@ export default function TeacherDashboard(): JSX.Element {
     if (!lessonPlan) return;
     const text = `
 LESSON PLAN: ${lessonPlan.topic}
-Curriculum: ${selectedClass?.curriculum}
+Curriculum: ${selectedAssignment?.curriculum}
 
 OBJECTIVES:
 ${lessonPlan.objectives.map((obj) => `- ${obj}`).join('\n')}
@@ -392,6 +456,9 @@ ${lessonPlan.assessment}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
           <p className="text-gray-500 mt-1">Manage grades, lessons, and student progress</p>
+          {currentTerm && (
+            <p className="text-gray-400 text-sm mt-2">Current Term: {currentTerm.name}</p>
+          )}
         </div>
       </div>
 
@@ -421,21 +488,21 @@ ${lessonPlan.assessment}
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Class Selector */}
-        {classes.length > 0 && (
+        {/* Class/Subject Selector */}
+        {classSubjects.length > 0 && (
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Class Stream</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Class and Subject</label>
             <select
-              value={selectedClass?.id || ''}
+              value={selectedAssignment?.classId || ''}
               onChange={(e) => {
-                const cls = classes.find((c) => c.id === e.target.value);
-                if (cls) setSelectedClass(cls);
+                const assignment = classSubjects.find((cs) => cs.classId === e.target.value);
+                if (assignment) setSelectedAssignment(assignment);
               }}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name} {cls.stream ? `- ${cls.stream}` : ''} ({cls.curriculum})
+              {classSubjects.map((cs) => (
+                <option key={`${cs.classId}-${cs.subjectId}`} value={cs.classId}>
+                  {cs.className} {cs.stream ? `- ${cs.stream}` : ''} ({cs.curriculum}) - {cs.subjectName}
                 </option>
               ))}
             </select>
@@ -469,14 +536,14 @@ ${lessonPlan.assessment}
         </div>
 
         {/* Gradebook Tab */}
-        {activeTab === 'gradebook' && selectedClass && (
+        {activeTab === 'gradebook' && selectedAssignment && (
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b">
               <h2 className="text-lg font-semibold text-gray-900">
-                {selectedClass.curriculum === 'CBC' ? 'CBC Competency Gradebook' : 'NCDC Traditional Gradebook'}
+                {selectedAssignment.curriculum === 'CBC' ? 'CBC Competency Gradebook' : 'NCDC Traditional Gradebook'}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                {selectedClass.curriculum === 'CBC'
+                {selectedAssignment.curriculum === 'CBC'
                   ? 'Input competency scores (1-3) and observations'
                   : 'Input BOT (10%), MOT (20%), EOT (70%)'}
               </p>
@@ -485,11 +552,11 @@ ${lessonPlan.assessment}
             {enrollments.length === 0 ? (
               <div className="px-6 py-12 text-center">
                 <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No students enrolled in this class yet.</p>
+                <p className="text-gray-500">No students enrolled in this class for the current term.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                {selectedClass.curriculum === 'CBC' ? (
+                {selectedAssignment.curriculum === 'CBC' ? (
                   // CBC Gradebook
                   <table className="w-full">
                     <thead className="bg-gray-50 border-t">
