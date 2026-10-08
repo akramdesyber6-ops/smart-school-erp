@@ -167,11 +167,19 @@ pnpm run dev
 ## 🔒 Security
 
 - TypeScript strict mode for type safety
-- Row Level Security (RLS) on all database tables
+- Row Level Security (RLS) on tenant-sensitive tables
 - Supabase Auth for authentication
 - Environment variable management
 - Input validation with Zod
 - CORS and security headers configured
+- Explicit school/tenant checks before access to a row or dashboard
+
+### Security notes
+
+- The app must only read/write rows whose `school_id` matches the currently authenticated user’s tenant context.
+- Teacher and parent access must be enforced by assignment checks and current-user identity, not by client-only route names.
+- Policy helpers are intentionally defined in `supabase/policies/01_tenant_isolation.sql` and are designed to be applied in a real Supabase project with the actual schema present.
+- The project is still not production-ready until a live Supabase tenant, a valid JWT claim set, and working remote GitHub authentication are available.
 
 ## 📦 Deployment
 

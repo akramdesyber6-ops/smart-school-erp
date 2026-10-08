@@ -21,7 +21,7 @@ export type RouteContext = {
  * @param context - Current route context (pathname)
  * @returns Redirect path if routing should be enforced, null/undefined otherwise
  */
-function normalizeRoles(values: unknown): string[] {
+export function normalizeRoles(values: unknown): string[] {
   if (!values) return [];
 
   if (Array.isArray(values)) {

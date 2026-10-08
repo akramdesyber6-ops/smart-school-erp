@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:security": "vitest run src/lib/routes/routing_security.test.ts",
     "format": "prettier --write \"src/**/*.{ts,tsx,md}\"",
     "db:setup": "supabase db push",
     "db:reset": "supabase db reset",

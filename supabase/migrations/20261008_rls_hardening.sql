@@ -1,9 +1,4 @@
--- supabase/policies/01_tenant_isolation.sql
--- Purpose: Multi-tenant, recursion-safe RLS helpers and policies for the tables that actually exist in the project.
--- Notes:
---  - The project uses JWT claims and profile metadata to identify the current tenant/school.
---  - Teacher and parent assignment checks are intentionally conservative and require explicit relationship tables or profile metadata.
---  - This file is safe to apply in a Supabase project even when optional assignment tables are not present.
+BEGIN;
 
 create schema if not exists policies;
 
@@ -224,34 +219,24 @@ set search_path = public, pg_temp as $$
   );
 $$;
 
--- 1) schools
 alter table if exists public.schools enable row level security;
-
 create policy if not exists "tenant_isolation_read_schools" on public.schools
 for select using (policies.allowed_school(id));
-
 create policy if not exists "tenant_isolation_modify_schools" on public.schools
 for all using (policies.allowed_school(id)) with check (policies.allowed_school(coalesce(new.id, id)));
 
--- 2) profiles
 alter table if exists public.profiles enable row level security;
-
 create policy if not exists "tenant_isolation_select_profiles" on public.profiles
 for select using (policies.allowed_school(school_id));
-
 create policy if not exists "tenant_isolation_insert_profiles" on public.profiles
 for insert with check (policies.allowed_school(new.school_id) and policies.require_authenticated_user());
-
 create policy if not exists "tenant_isolation_update_profiles" on public.profiles
 for update using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
-
 create policy if not exists "tenant_isolation_delete_profiles" on public.profiles
 for delete using (policies.allowed_school(school_id));
-
 create policy if not exists "self_profile_access" on public.profiles
 for select using (policies.is_service_role() or (profiles.user_id = policies.current_user_id()));
 
--- 3) student and school context tables
 alter table if exists public.students enable row level security;
 create policy if not exists "tenant_isolation_students" on public.students
 for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
@@ -264,7 +249,6 @@ alter table if exists public.teachers enable row level security;
 create policy if not exists "tenant_isolation_teachers" on public.teachers
 for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
 
--- 4) academic tables
 alter table if exists public.academic_terms enable row level security;
 create policy if not exists "tenant_isolation_terms" on public.academic_terms
 for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
@@ -297,39 +281,4 @@ alter table if exists public.report_verifications enable row level security;
 create policy if not exists "tenant_isolation_report_verifications" on public.report_verifications
 for all using (policies.allowed_school(school_id)) with check (policies.allowed_school(coalesce(new.school_id, school_id)));
 
--- 5) role-aware policies for sensitive reads (only if corresponding tables exist)
-create policy if not exists "teacher_class_scope" on public.enrollments
-for select using (
-  policies.is_service_role()
-  or policies.allowed_school(school_id)
-  and (
-    policies.is_teacher_for_class(class_id)
-    or policies.is_student_own_record(student_id)
-    or policies.is_parent_of_student(student_id)
-  )
-);
-
-create policy if not exists "teacher_markbook_scope" on public.markbook_entries
-for select using (
-  policies.is_service_role()
-  or policies.allowed_school(school_id)
-  and (
-    policies.is_teacher_for_class(class_id)
-    or policies.is_student_own_record(student_id)
-    or policies.is_parent_of_student(student_id)
-  )
-);
-
-create policy if not exists "teacher_attendance_scope" on public.attendance
-for select using (
-  policies.is_service_role()
-  or policies.allowed_school(school_id)
-  and (
-    policies.is_teacher_for_class(class_id)
-    or policies.is_student_own_record(student_id)
-    or policies.is_parent_of_student(student_id)
-  )
-);
-
--- Note: assignment tables are optional; if they do not exist, strict tenant isolation still applies while the app enforces
--- teacher/parent/student rules in application logic.
+COMMIT;
