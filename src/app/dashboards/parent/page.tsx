@@ -43,7 +43,7 @@ export default function ParentDashboard(): JSX.Element {
         return;
       }
 
-      if (profile.role !== 'parent' && profile.role !== 'admin' && profile.role !== 'school_admin') {
+      if (profile.role !== 'parent') {
         setError('Unauthorized: Only parents can access this dashboard.');
         setTimeout(() => router.push('/dashboard'), 2000);
         return;

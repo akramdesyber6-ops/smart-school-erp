@@ -5,7 +5,7 @@
  * Wired to live Supabase backend with real-time synchronization
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import MarksEntryDashboard from '@/components/MarksEntryDashboard';
 import { Student } from '@/types/assessment';
@@ -46,9 +46,17 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 }
 
 export default function MarksPage() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <MarksPageContent />
+    </Suspense>
+  );
+}
+
+function MarksPageContent() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
-  
+
   // Get parameters from URL
   const classId = searchParams.get('classId') || '';
   const subjectId = searchParams.get('subjectId') || '';
@@ -74,7 +82,7 @@ export default function MarksPage() {
         setLoading(true);
         setError(null);
         const fetchedStudents = await getClassStudents(classId);
-        
+
         if (fetchedStudents.length === 0) {
           setError(`No students found in class ${studentClass}`);
         } else {

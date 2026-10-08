@@ -52,7 +52,7 @@ export default function StudentDashboard(): JSX.Element {
         return;
       }
 
-      if (profile.role !== 'student' && profile.role !== 'admin' && profile.role !== 'school_admin') {
+      if (profile.role !== 'student') {
         setError('Unauthorized: Only students can access this dashboard.');
         setTimeout(() => router.push('/dashboard'), 2000);
         return;

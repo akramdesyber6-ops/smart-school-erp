@@ -194,7 +194,7 @@ export default function LandingPage(): JSX.Element {
             </h2>
 
             <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Kampala Elite Academy and Uganda's leading schools trust Smart School ERP for seamless student management,
+              Kampala Elite Academy and Uganda&apos;s leading schools trust Smart School ERP for seamless student management,
               dual-curriculum grading, and real-time progress tracking—all built for East Africa.
             </p>
 
@@ -222,7 +222,7 @@ export default function LandingPage(): JSX.Element {
       <section id="features" className="py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h3 className="text-4xl font-bold mb-4">Built for Uganda's Schools</h3>
+            <h3 className="text-4xl font-bold mb-4">Built for Uganda&apos;s Schools</h3>
             <p className="text-xl text-slate-300">Comprehensive features designed specifically for East African education standards</p>
           </div>
 
@@ -231,7 +231,7 @@ export default function LandingPage(): JSX.Element {
               {
                 icon: Shield,
                 title: 'Multi-Tenant Security',
-                description: 'Enterprise-grade Row Level Security (RLS) ensures each school\'s data remains completely isolated and protected.',
+                description: 'Enterprise-grade Row Level Security (RLS) ensures each school&apos;s data remains completely isolated and protected.',
               },
               {
                 icon: Users,
@@ -472,7 +472,7 @@ export default function LandingPage(): JSX.Element {
               <div className="mt-6 p-4 rounded-lg bg-amber-900/20 border border-amber-700/50">
                 <p className="text-sm text-amber-200">
                   <strong>⚠️ Development Environment:</strong> These credentials are for local/staging testing only. Never use in production.
-                  All demo accounts access the same "Kampala Elite Academy" tenant.
+                  All demo accounts access the same {'"'}Kampala Elite Academy{'"'} tenant.
                 </p>
               </div>
             </div>
@@ -485,7 +485,7 @@ export default function LandingPage(): JSX.Element {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
           <h3 className="text-4xl font-bold">Ready to Transform Your School?</h3>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto">
-            Join Uganda's leading schools leveraging Smart School ERP for intelligent education management.
+            Join Uganda&apos;s leading schools leveraging Smart School ERP for intelligent education management.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button

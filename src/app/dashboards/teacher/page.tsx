@@ -142,7 +142,7 @@ export default function TeacherDashboard(): JSX.Element {
         return;
       }
 
-      if (profile.role !== 'teacher' && profile.role !== 'admin') {
+      if (profile.role !== 'teacher') {
         setError('Unauthorized: Only teachers can access this dashboard.');
         setTimeout(() => router.push('/dashboard'), 2000);
         return;
@@ -193,7 +193,7 @@ export default function TeacherDashboard(): JSX.Element {
           .order('students.first_name', { ascending: true });
 
         if (enrollmentsError && enrollmentsError.code !== 'PGRST116') throw enrollmentsError;
-        setEnrollments((enrollmentsData || []) as StudentEnrollment[]);
+        setEnrollments((enrollmentsData || []) as unknown as StudentEnrollment[]);
 
         // Load existing markbook entries
         const { data: markbookData, error: markbookError } = await supabase
@@ -203,9 +203,9 @@ export default function TeacherDashboard(): JSX.Element {
           .eq('school_id', activeSchoolId);
 
         if (markbookError && markbookError.code !== 'PGRST116') throw markbookError;
-        const newMarkbookMap = new Map();
+        const newMarkbookMap = new Map<string, MarkbookEntry>();
         (markbookData || []).forEach((entry: any) => {
-          newMarkbookMap.set(entry.student_id, entry);
+          newMarkbookMap.set(entry.student_id, entry as MarkbookEntry);
         });
         setMarkbookData(newMarkbookMap);
       } catch (err: any) {
@@ -219,8 +219,12 @@ export default function TeacherDashboard(): JSX.Element {
   }, [selectedClass, activeSchoolId]);
 
   // Calculate total percentage for NCDC
-  const calculateNcdcTotal = (bot: number | null, mot: number | null, eot: number | null): number | null => {
-    if (bot === null || mot === null || eot === null) return null;
+  const calculateNcdcTotal = (
+    bot: number | null | undefined,
+    mot: number | null | undefined,
+    eot: number | null | undefined
+  ): number | null => {
+    if (bot == null || mot == null || eot == null) return null;
     return bot * 0.1 + mot * 0.2 + eot * 0.7;
   };
 
@@ -229,13 +233,13 @@ export default function TeacherDashboard(): JSX.Element {
     if (!selectedClass || !activeSchoolId) return;
     setSaving(true);
     try {
-      const entryToSave = {
+      const entryToSave: Partial<MarkbookEntry> = {
+        ...entry,
         student_id: studentId,
         class_id: selectedClass.id,
-        subject_id: 'default-subject',
-        term_id: 'current-term',
+        subject_id: entry.subject_id || 'default-subject',
+        term_id: entry.term_id || 'current-term',
         school_id: activeSchoolId,
-        ...entry,
       };
 
       // For CBC, save competency score and observation
@@ -282,24 +286,50 @@ export default function TeacherDashboard(): JSX.Element {
 
   // Handle CBC competency score change
   const handleCbcScoreChange = (studentId: string, score: number) => {
-    const entry = markbookData.get(studentId) || { student_id: studentId };
+    const entry =
+      markbookData.get(studentId) ||
+      ({
+        student_id: studentId,
+        class_id: selectedClass?.id || '',
+        school_id: activeSchoolId || '',
+        subject_id: '',
+        term_id: '',
+      } as MarkbookEntry);
     entry.competency_score = score;
     saveMarkbookEntry(studentId, entry as MarkbookEntry);
   };
 
   // Handle CBC observation change
   const handleCbcObservationChange = (studentId: string, observation: string) => {
-    const entry = markbookData.get(studentId) || { student_id: studentId };
+    const entry =
+      markbookData.get(studentId) ||
+      ({
+        student_id: studentId,
+        class_id: selectedClass?.id || '',
+        school_id: activeSchoolId || '',
+        subject_id: '',
+        term_id: '',
+      } as MarkbookEntry);
     entry.observation = observation;
   };
 
   // Handle NCDC score change
   const handleNcdcScoreChange = (studentId: string, field: 'bot' | 'mot' | 'eot', value: number) => {
-    const entry = markbookData.get(studentId) || { student_id: studentId };
+    const entry =
+      markbookData.get(studentId) ||
+      ({
+        student_id: studentId,
+        class_id: selectedClass?.id || '',
+        school_id: activeSchoolId || '',
+        subject_id: '',
+        term_id: '',
+      } as MarkbookEntry);
     if (field === 'bot') entry.bot_score = value;
     if (field === 'mot') entry.mot_score = value;
     if (field === 'eot') entry.eot_score = value;
-    setMarkbookData(new Map(markbookData.set(studentId, entry as MarkbookEntry)));
+    const nextMap = new Map(markbookData);
+    nextMap.set(studentId, entry as MarkbookEntry);
+    setMarkbookData(nextMap);
   };
 
   // Save NCDC scores

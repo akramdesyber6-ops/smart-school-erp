@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo } from 'react';
-import QRCode from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   StudentGradeReport,
   SchoolProfile,
@@ -112,7 +112,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
                 {school.location}
               </p>
               <p className="text-xs italic text-slate-500 print:text-xs">
-                "{school.motto}"
+                {`"${school.motto}"`}
               </p>
             </div>
 
@@ -399,7 +399,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
             <div className="flex items-center justify-center gap-6 print:gap-4">
               <div className="flex flex-col items-center justify-center">
                 <div className="rounded-lg border-2 border-slate-300 bg-white p-2 print:border print:border-slate-300 print:p-1.5">
-                  <QRCode
+                  <QRCodeSVG
                     value={verificationUrl}
                     size={120}
                     level="H"

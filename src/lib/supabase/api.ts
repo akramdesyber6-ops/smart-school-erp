@@ -8,13 +8,16 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABAS
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // Fail fast if environment is incorrectly configured on server-side builds.
-  // In client-side builds these values should be present as NEXT_PUBLIC_* vars.
+  // Keep the client constructor safe during static builds and CI so production builds can complete without runtime envs.
+  // Real Supabase credentials must still be configured in the deployment environment before app usage.
   // eslint-disable-next-line no-console
   console.warn('Supabase environment variables are not fully configured. Ensure SUPABASE_URL and SUPABASE_ANON_KEY are set.');
 }
 
-export const supabase: SupabaseClient = createClient(SUPABASE_URL || '', SUPABASE_ANON_KEY || '');
+const SAFE_SUPABASE_URL = SUPABASE_URL || 'https://placeholder.supabase.co';
+const SAFE_SUPABASE_ANON_KEY = SUPABASE_ANON_KEY || 'placeholder-anon-key';
+
+export const supabase: SupabaseClient = createClient(SAFE_SUPABASE_URL, SAFE_SUPABASE_ANON_KEY);
 
 // ----------------------
 // Types
@@ -121,13 +124,17 @@ export async function getEnrollmentRoster(termId: string, classIdOrStream: strin
       // Try join through classes by stream
       const { data: joinedData, error: joinErr } = await supabase
         .from('enrollments')
-        .select('enrollments(id,student_id,class_id,term_id,school_id,status), students(id,first_name,last_name,registration_number)')
+        .select('id, student_id, class_id, term_id, school_id, status, students!inner(id,first_name,last_name,registration_number)')
         .eq('term_id', termId)
-        .in('class_id', supabase.rpc ? [] : []); // placeholder to keep TS happy; we'll do client-side join below
+        .order('status', { ascending: true });
 
       if (joinErr) throw joinErr;
 
-      const filtered = (joinedData || []).filter((row: any) => row.enrollments && row.enrollments.class_id && row.enrollments.class_id === classIdOrStream);
+      const filtered = (joinedData || []).filter((row: any) => {
+        const classMatch = row.class_id === classIdOrStream;
+        const studentMatch = row.students?.id === classIdOrStream;
+        return classMatch || studentMatch;
+      });
       return { data: filtered, error: null };
     }
 
