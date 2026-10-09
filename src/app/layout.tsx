@@ -5,10 +5,10 @@ import AuthProvider from '@/components/AuthProvider';
 
 export const metadata: Metadata = {
   title: 'Smart School ERP',
-  description: 'Multi-tenant school management and academic dashboard platform',
+  description: 'Multi-tenant school management platform',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
       <body>

@@ -47,13 +47,10 @@ export default function LoginPage(): JSX.Element {
         .from('profiles')
         .select('*')
         .eq('user_id', session.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
-        const message = profileError.message || 'Failed to fetch user profile.';
-        setError(message);
-        setLoading(false);
-        return;
+        throw new Error(`Unable to load your school profile: ${profileError.message}`);
       }
 
       if (!profile || profile.is_active !== true) {
@@ -61,9 +58,11 @@ export default function LoginPage(): JSX.Element {
         if (signOutError) {
           throw new Error(`This school account is inactive and could not be signed out: ${signOutError.message}`);
         }
-        setError('This school account is inactive. Contact your school administrator.');
-        setLoading(false);
-        return;
+        throw new Error(
+          profile
+            ? 'This school account is inactive. Contact your school administrator.'
+            : 'No user profile found. Your authentication succeeded but your account is not yet provisioned in the school database. Please contact your administrator.'
+        );
       }
 
       // Persist session and profile to the Zustand store
@@ -118,7 +117,7 @@ export default function LoginPage(): JSX.Element {
             <button
               type="submit"
               disabled={loading}
-              className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

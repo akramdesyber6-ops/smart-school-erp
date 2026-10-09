@@ -1,97 +1,120 @@
-/**
- * src/lib/routes/routing_security.ts
- * 
- * Centralized routing security logic for both server-side middleware
- * and client-side login/auth flows.
- */
+/** Centralized authentication navigation rules. */
 
-import type { JWTPayload } from 'jose';
+export type ApplicationRole = 'admin' | 'school_admin' | 'super_admin' | 'teacher' | 'student' | 'parent';
 
 export type RouteContext = {
   pathname: string;
 };
 
-/**
- * Process secure redirects based on JWT payload and current route context.
- * 
- * This function is used by both the middleware (server-side) and login page (client-side)
- * to determine where a user should be routed based on their authentication state and roles.
- * 
- * @param payload - Decoded JWT payload (null if unauthenticated)
- * @param context - Current route context (pathname)
- * @returns Redirect path if routing should be enforced, null/undefined otherwise
- */
+type RoleRoute = {
+  roles: readonly ApplicationRole[];
+  target: string;
+  routes: readonly string[];
+  exactRoutes?: readonly string[];
+};
+
+const APPLICATION_ROLES: readonly ApplicationRole[] = [
+  'admin',
+  'school_admin',
+  'super_admin',
+  'teacher',
+  'student',
+  'parent',
+];
+
+const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
+
+const ROLE_ROUTES: readonly RoleRoute[] = [
+  {
+    roles: ['admin', 'school_admin', 'super_admin'],
+    target: '/admin',
+    routes: ['/admin', '/school-admin-dashboard', '/dashboards/school-admin', '/dashboards/admin'],
+  },
+  {
+    roles: ['teacher'],
+    target: '/teacher-dashboard',
+    routes: ['/teacher-dashboard', '/dashboards/teacher', '/dashboard/marks'],
+  },
+  {
+    roles: ['student'],
+    target: '/dashboard',
+    routes: ['/student-dashboard', '/dashboards/student'],
+    exactRoutes: ['/dashboard'],
+  },
+  {
+    roles: ['parent'],
+    target: '/parent-dashboard',
+    routes: ['/parent-dashboard', '/dashboards/parent'],
+  },
+];
+
 export function normalizeRoles(values: unknown): string[] {
-  if (!values) return [];
+  const candidates = Array.isArray(values)
+    ? values
+    : typeof values === 'string'
+      ? values.split(',')
+      : [];
 
-  if (Array.isArray(values)) {
-    return values.filter((value): value is string => typeof value === 'string').map((value) => value.toLowerCase());
-  }
+  return candidates
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
 
-  if (typeof values === 'string') {
-    return values
-      .split(',')
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean);
-  }
+export function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTE_PREFIXES.some(
+    (route) => pathname === route || (route !== '/' && pathname.startsWith(`${route}/`))
+  );
+}
 
-  return [];
+export function getRoles(payload: Record<string, unknown>): ApplicationRole[] {
+  const values = [
+    ...normalizeRoles(payload.role),
+    ...normalizeRoles(payload.roles),
+    ...normalizeRoles(payload['x-hasura-allowed-roles']),
+  ];
+
+  return [...new Set(values.filter((role): role is ApplicationRole =>
+    APPLICATION_ROLES.includes(role as ApplicationRole)
+  ))];
+}
+
+export function getDashboardPathForRole(role: unknown): string {
+  const normalizedRole = typeof role === 'string' ? role.toLowerCase() : '';
+  return ROLE_ROUTES.find((route) => route.roles.includes(normalizedRole as ApplicationRole))?.target ?? '/';
+}
+
+function routeForPath(pathname: string): RoleRoute | undefined {
+  return ROLE_ROUTES.find((route) =>
+    route.routes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)) ||
+    route.exactRoutes?.includes(pathname)
+  );
+}
+
+export function canAccessRoute(roles: readonly ApplicationRole[], pathname: string): boolean {
+  const route = routeForPath(pathname);
+  return !route || route.roles.some((role) => roles.includes(role));
 }
 
 export async function processSecureRedirects(
-  payload: JWTPayload | Record<string, unknown> | null,
+  payload: Record<string, unknown> | null,
   context: RouteContext
-): Promise<string | null | undefined> {
+): Promise<string | null> {
   const { pathname } = context;
 
-  if (!payload) {
-    const publicRoutes = ['/', '/login', '/forgot-password', '/signup'];
-    if (publicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
-      return null;
-    }
-    return '/login';
+  if (!payload) return isPublicRoute(pathname) ? null : '/login';
+
+  const roles = getRoles(payload);
+  const primaryRole = roles[0];
+  const destination = getDashboardPathForRole(primaryRole);
+
+  if (pathname === '/' || pathname === '/login') {
+    return destination === '/' ? null : destination;
   }
 
-  const rawRoles = payload['x-hasura-allowed-roles'];
-  const role = typeof payload.role === 'string' ? payload.role.toLowerCase() : null;
-  const roles = normalizeRoles(payload.roles ?? rawRoles ?? payload.role ?? []);
-  const allRoles = new Set([role, ...roles].filter(Boolean) as string[]);
-
-  const roleRoutes = [
-    {
-      roles: ['admin', 'school_admin', 'super_admin'],
-      target: '/admin',
-      routes: ['/admin', '/school-admin-dashboard', '/dashboards/school-admin', '/dashboards/admin'],
-    },
-    {
-      roles: ['teacher'],
-      target: '/teacher-dashboard',
-      routes: ['/teacher-dashboard', '/dashboards/teacher', '/dashboard/marks'],
-    },
-    {
-      roles: ['student'],
-      target: '/dashboard',
-      routes: ['/dashboard', '/student-dashboard', '/dashboards/student'],
-    },
-    {
-      roles: ['parent'],
-      target: '/parent-dashboard',
-      routes: ['/parent-dashboard', '/dashboards/parent'],
-    },
-  ];
-
-  const dashboardPaths = roleRoutes.flatMap((entry) => entry.routes);
-  const isDashboardPath = dashboardPaths.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-  const selectedRole = roleRoutes.find((entry) => entry.roles.some((name) => allRoles.has(name)));
-  if (!selectedRole) return isDashboardPath ? '/login' : null;
-
-  const isMarksEntryPath = pathname === '/dashboard/marks' || pathname.startsWith('/dashboard/marks/');
-  const isOwnDashboardPath =
-    selectedRole.routes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) &&
-    !(isMarksEntryPath && selectedRole.target !== '/teacher-dashboard');
-
-  if (pathname === '/' || pathname === '/login') return selectedRole.target;
-  if (isDashboardPath && !isOwnDashboardPath) return selectedRole.target;
+  if (!routeForPath(pathname)) return null;
+  if (roles.length === 0) return '/login';
+  if (!canAccessRoute(roles, pathname)) return destination;
 
   return null;
 }

@@ -1,31 +1,7 @@
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { processSecureRedirects } from '@/lib/routes/routing_security';
-
-const PUBLIC_PATHS = new Set(['/', '/login', '/forgot-password', '/signup']);
-const ROLE_PATHS = [
-  '/admin',
-  '/school-admin-dashboard',
-  '/dashboards/school-admin',
-  '/dashboards/admin',
-  '/teacher-dashboard',
-  '/dashboards/teacher',
-  '/dashboard/marks',
-  '/dashboard',
-  '/student-dashboard',
-  '/dashboards/student',
-  '/parent-dashboard',
-  '/dashboards/parent',
-];
-
-function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.has(pathname) || [...PUBLIC_PATHS].some((path) => path !== '/' && pathname.startsWith(`${path}/`));
-}
-
-function isRolePath(pathname: string): boolean {
-  return ROLE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-}
+import { isPublicRoute, processSecureRedirects } from '@/lib/routes/routing_security';
 
 function copyCookies(source: NextResponse, target: NextResponse): NextResponse {
   for (const cookie of source.cookies.getAll()) {
@@ -45,25 +21,27 @@ export async function middleware(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isPublicPath(pathname)) return response;
+    if (isPublicRoute(pathname)) return response;
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Authentication is not configured.' }, { status: 503 });
     }
     return redirectWithCookies(request, response, '/login');
   }
 
-  const supabase = createMiddlewareClient({
-    req: request,
-    res: response,
-  });
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const supabase = createMiddlewareClient({ req: request, res: response });
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    if (isPublicPath(pathname)) return response;
+    if (isPublicRoute(pathname)) return response;
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }
-    return redirectWithCookies(request, response, '/login');
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('next', pathname);
+    return copyCookies(response, NextResponse.redirect(loginUrl));
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -74,7 +52,7 @@ export async function middleware(request: NextRequest) {
 
   if (profileError) {
     console.error('Unable to load role for authenticated request:', profileError.message);
-    if (isPublicPath(pathname)) return response;
+    if (isPublicRoute(pathname)) return response;
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unable to verify account access.' }, { status: 503 });
     }
@@ -82,17 +60,15 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!profile || profile.is_active !== true) {
-    if (isPublicPath(pathname)) return response;
+    if (isPublicRoute(pathname)) return response;
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'An active school profile is required.' }, { status: 403 });
     }
     return redirectWithCookies(request, response, '/login');
   }
 
-  if (isRolePath(pathname) || isPublicPath(pathname)) {
-    const redirectPath = await processSecureRedirects(profile, { pathname });
-    if (redirectPath) return redirectWithCookies(request, response, redirectPath);
-  }
+  const redirectPath = await processSecureRedirects(profile, { pathname });
+  if (redirectPath) return redirectWithCookies(request, response, redirectPath);
 
   return response;
 }

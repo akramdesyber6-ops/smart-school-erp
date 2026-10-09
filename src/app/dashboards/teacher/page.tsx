@@ -171,7 +171,12 @@ export default function TeacherDashboard(): JSX.Element {
       try {
         const { data: assignmentsData, error: assignmentsError } = await supabase
           .from('class_subjects')
-          .select('class_id, subject_id, classes!inner(id, name, stream, school_id, curriculum), subjects!inner(id, name)')
+          .select(`
+            class_id,
+            subject_id,
+            classes!inner(id, name, stream, school_id, curriculum),
+            subjects!inner(id, name)
+          `)
           .eq('teacher_id', profile.id)
           .eq('classes.school_id', activeSchoolId);
 
@@ -257,7 +262,7 @@ export default function TeacherDashboard(): JSX.Element {
         if (enrollmentsError) throw enrollmentsError;
         setEnrollments((enrollmentsData || []) as unknown as StudentEnrollment[]);
 
-        // Load existing markbook entries
+        // Load existing markbook entries for this class/subject/term combination
         const { data: markbookData, error: markbookError } = await supabase
           .from('markbook_entries')
           .select('*')
@@ -374,7 +379,12 @@ export default function TeacherDashboard(): JSX.Element {
       setSuccess('Grades saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save grades.');
+      console.error('Save error:', err);
+      if (err?.code === '23503') {
+        setError('Invalid subject or term assignment. Please refresh and try again.');
+      } else {
+        setError(err?.message || 'Unable to save marks. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -441,7 +451,7 @@ export default function TeacherDashboard(): JSX.Element {
     if (!lessonPlan) return;
     const text = `
 LESSON PLAN: ${lessonPlan.topic}
-Curriculum: ${selectedClass?.curriculum}
+Curriculum: ${selectedClass?.curriculum ?? 'CBC'}
 
 OBJECTIVES:
 ${lessonPlan.objectives.map((obj) => `- ${obj}`).join('\n')}
@@ -507,6 +517,11 @@ ${lessonPlan.assessment}
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
             <p className="text-gray-500 mt-1">Manage grades, lessons, and student progress</p>
+            {selectedTermId && (
+              <p className="text-gray-400 text-sm mt-2">
+                Academic Term: {terms.find((term) => term.id === selectedTermId)?.name}
+              </p>
+            )}
           </div>
           <DashboardAccountActions />
         </div>
@@ -543,21 +558,21 @@ ${lessonPlan.assessment}
           <div className="mb-8 flex flex-wrap items-end gap-4">
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="teacher-class">Select Class Stream</label>
-            <select
-              id="teacher-class"
-              value={selectedClass?.id || ''}
-              onChange={(e) => {
-                const cls = classes.find((c) => c.id === e.target.value);
-                if (cls) setSelectedClass(cls);
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-            >
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name} {cls.stream ? `- ${cls.stream}` : ''} ({cls.curriculum})
-                </option>
-              ))}
-            </select>
+              <select
+                id="teacher-class"
+                value={selectedClass?.id || ''}
+                onChange={(event) => {
+                  const nextClass = classes.find((classRow) => classRow.id === event.target.value) ?? null;
+                  setSelectedClass(nextClass);
+                }}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {classes.map((classRow) => (
+                  <option key={classRow.id} value={classRow.id}>
+                    {classRow.name} {classRow.stream ? `- ${classRow.stream}` : ''} ({classRow.curriculum})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="teacher-subject">Assigned Subject</label>
@@ -626,7 +641,7 @@ ${lessonPlan.assessment}
         </div>
 
         {/* Gradebook Tab */}
-        {activeTab === 'gradebook' && selectedClass && (
+        {activeTab === 'gradebook' && selectedClass && selectedSubjectId && selectedTermId && (
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b">
               <h2 className="text-lg font-semibold text-gray-900">
@@ -642,7 +657,7 @@ ${lessonPlan.assessment}
             {enrollments.length === 0 ? (
               <div className="px-6 py-12 text-center">
                 <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No students enrolled in this class yet.</p>
+                <p className="text-gray-500">No students enrolled in this class for the current term.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
