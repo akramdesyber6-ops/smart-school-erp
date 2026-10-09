@@ -75,8 +75,8 @@ export default function LandingPage(): JSX.Element {
             <a href="#modules" className="text-slate-300 hover:text-white transition">
               Modules
             </a>
-            <a href="#sandbox" className="text-slate-300 hover:text-white transition">
-              Testing
+            <a href="#modules" className="text-slate-300 hover:text-white transition">
+              Assessments
             </a>
             <button
               onClick={() => router.push('/login')}
@@ -121,8 +121,7 @@ export default function LandingPage(): JSX.Element {
             </h2>
 
             <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Kampala Elite Academy and Uganda's leading schools trust Smart School ERP for seamless student management,
-              dual-curriculum grading, and real-time progress tracking—all built for East Africa.
+              Manage school operations, academic records, and student progress with role-aware tools for East African schools.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
@@ -133,13 +132,6 @@ export default function LandingPage(): JSX.Element {
                 <Shield className="h-5 w-5" />
                 Secure Login
               </button>
-              <button
-                onClick={() => setSandboxOpen(!sandboxOpen)}
-                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-lg border border-slate-600 hover:border-slate-400 hover:bg-slate-800/50 transition font-semibold"
-              >
-                <Code className="h-5 w-5" />
-                View Test Credentials
-              </button>
             </div>
           </div>
         </div>
@@ -149,7 +141,7 @@ export default function LandingPage(): JSX.Element {
       <section id="features" className="py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h3 className="text-4xl font-bold mb-4">Built for Uganda's Schools</h3>
+            <h3 className="text-4xl font-bold mb-4">Built for Uganda&apos;s Schools</h3>
             <p className="text-xl text-slate-300">Comprehensive features designed specifically for East African education standards</p>
           </div>
 
@@ -158,7 +150,7 @@ export default function LandingPage(): JSX.Element {
               {
                 icon: Shield,
                 title: 'Multi-Tenant Security',
-                description: 'Enterprise-grade Row Level Security (RLS) ensures each school\'s data remains completely isolated and protected.',
+                description: 'Enterprise-grade Row Level Security (RLS) ensures each school&apos;s data remains completely isolated and protected.',
               },
               {
                 icon: Users,
@@ -291,128 +283,12 @@ export default function LandingPage(): JSX.Element {
         </div>
       </section>
 
-      {/* Developer Sandbox Panel */}
-      <section id="sandbox" className="py-16 sm:py-24">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div
-            onClick={() => setSandboxOpen(!sandboxOpen)}
-            className="flex items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-amber-900/30 to-orange-900/30 border border-amber-700/50 hover:border-amber-600 transition cursor-pointer group"
-          >
-            <div className="flex items-center gap-4">
-              <Code className="h-6 w-6 text-amber-400" />
-              <div>
-                <h3 className="text-lg font-semibold">👨‍💻 Developer Sandbox & Testing Accounts</h3>
-                <p className="text-sm text-slate-300 mt-1">Demo credentials for platform personas—use to explore all features</p>
-              </div>
-            </div>
-            {sandboxOpen ? (
-              <ChevronUp className="h-5 w-5 text-amber-400" />
-            ) : (
-              <ChevronDown className="h-5 w-5 text-amber-400" />
-            )}
-          </div>
-
-          {sandboxOpen && (
-            <div className="mt-6 space-y-4">
-              {TEST_ACCOUNTS.map((account, idx) => (
-                <div
-                  key={idx}
-                  className="relative p-6 rounded-xl bg-slate-800/50 border border-slate-700 hover:border-slate-600 transition overflow-hidden group"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-amber-600/10 to-transparent opacity-0 group-hover:opacity-100 transition" />
-                  <div className="relative">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <h4 className="text-lg font-semibold">{account.name}</h4>
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
-                            {account.role}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-400">{account.description}</p>
-                      </div>
-                      <button
-                        onClick={() => router.push('/login')}
-                        className="whitespace-nowrap inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition font-medium text-sm"
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                        Login
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Email */}
-                      <div className="p-3 rounded-lg bg-slate-700/50 border border-slate-600">
-                        <label className="text-xs font-semibold text-slate-400 uppercase">Email</label>
-                        <div className="flex items-center gap-2 mt-2">
-                          <code className="text-sm font-mono text-slate-200 break-all flex-1">{account.email}</code>
-                          <button
-                            onClick={() => copyToClipboard(account.email, `email-${idx}`)}
-                            className="p-1.5 rounded hover:bg-slate-600 transition flex-shrink-0"
-                            title="Copy email"
-                          >
-                            {copied[`email-${idx}`] ? (
-                              <CheckCircle className="h-4 w-4 text-green-400" />
-                            ) : (
-                              <Copy className="h-4 w-4 text-slate-400" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Password */}
-                      <div className="p-3 rounded-lg bg-slate-700/50 border border-slate-600">
-                        <label className="text-xs font-semibold text-slate-400 uppercase">Password</label>
-                        <div className="flex items-center gap-2 mt-2">
-                          <code className="text-sm font-mono text-slate-200 flex-1">
-                            {showPasswords[`pass-${idx}`] ? account.password : '••••••••••'}
-                          </code>
-                          <button
-                            onClick={() => togglePasswordVisibility(`pass-${idx}`)}
-                            className="p-1.5 rounded hover:bg-slate-600 transition flex-shrink-0"
-                            title="Toggle password visibility"
-                          >
-                            {showPasswords[`pass-${idx}`] ? (
-                              <EyeOff className="h-4 w-4 text-slate-400" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-slate-400" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => copyToClipboard(account.password, `pass-${idx}`)}
-                            className="p-1.5 rounded hover:bg-slate-600 transition flex-shrink-0"
-                            title="Copy password"
-                          >
-                            {copied[`pass-${idx}`] ? (
-                              <CheckCircle className="h-4 w-4 text-green-400" />
-                            ) : (
-                              <Copy className="h-4 w-4 text-slate-400" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <div className="mt-6 p-4 rounded-lg bg-amber-900/20 border border-amber-700/50">
-                <p className="text-sm text-amber-200">
-                  <strong>⚠️ Development Environment:</strong> These credentials are for local/staging testing only. Never use in production.
-                  All demo accounts access the same "Kampala Elite Academy" tenant.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* CTA Footer */}
       <section className="py-16 sm:py-24 border-t border-slate-700">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
           <h3 className="text-4xl font-bold">Ready to Transform Your School?</h3>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto">
-            Join Uganda's leading schools leveraging Smart School ERP for intelligent education management.
+            Join Uganda&apos;s leading schools leveraging Smart School ERP for intelligent education management.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
@@ -421,13 +297,6 @@ export default function LandingPage(): JSX.Element {
             >
               <Shield className="h-5 w-5" />
               Secure Login Now
-            </button>
-            <button
-              onClick={() => setSandboxOpen(!sandboxOpen)}
-              className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-lg border border-slate-600 hover:border-slate-400 hover:bg-slate-800/50 transition font-semibold"
-            >
-              <Code className="h-5 w-5" />
-              Test Drive
             </button>
           </div>
         </div>

@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import useAuthStore from '@/lib/stores/useAuthStore';
 import { processSecureRedirects } from '@/lib/routes/routing_security';
+import { supabase } from '@/lib/supabase/client';
 
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
@@ -19,7 +19,9 @@ export default function LoginPage(): JSX.Element {
     setError(null);
     setLoading(true);
     try {
-      const supabase = createClientComponentClient();
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        throw new Error('Supabase client not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+      }
 
       const {
         data: signInData,
@@ -45,48 +47,34 @@ export default function LoginPage(): JSX.Element {
         .from('profiles')
         .select('*')
         .eq('user_id', session.user.id)
-        .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
-        const message = profileError.message || 'Failed to fetch user profile.';
-        // Provide more actionable guidance when profile is missing or not provisioned
-        if (profileError.code === 'PGRST116' || profileError.message?.includes('No rows')) {
-          setError('No user profile found. Your authentication succeeded but your account is not yet provisioned in the school database. Please contact your administrator.');
-        } else {
-          setError(message + ' If this persists contact your administrator.');
-        }
-        setLoading(false);
-        return;
+        throw new Error(`Unable to load your school profile: ${profileError.message}`);
       }
 
-      if (!profile) {
-        setError('No user profile found. Your authentication succeeded but your account is not yet provisioned in the school database. Please contact your administrator.');
-        setLoading(false);
-        return;
+      if (!profile || profile.is_active !== true) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          throw new Error(`This school account is inactive and could not be signed out: ${signOutError.message}`);
+        }
+        throw new Error(
+          profile
+            ? 'This school account is inactive. Contact your school administrator.'
+            : 'No user profile found. Your authentication succeeded but your account is not yet provisioned in the school database. Please contact your administrator.'
+        );
       }
 
       // Persist session and profile to the Zustand store
       useAuthStore.getState().setSession({ session, profile });
 
-      // Execute routing logic using processSecureRedirects
-      try {
-        const redirectPath = await processSecureRedirects(
-          { role: profile?.role, roles: profile?.roles },
-          { pathname: '/' }
-        );
-        if (redirectPath) {
-          router.push(redirectPath);
-          return;
-        }
-      } catch (e) {
-        // ignore and use default
-      }
-
-      // Default fallback
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err?.message ?? 'Unknown authentication error');
+      const redirectPath = await processSecureRedirects(
+        { role: profile.role, roles: profile.roles },
+        { pathname: '/' }
+      );
+      router.replace(redirectPath ?? '/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown authentication error');
     } finally {
       setLoading(false);
     }

@@ -1,10 +1,8 @@
 // src/lib/supabase/api.ts
 // Strongly-typed Supabase API client wrapper and helper query functions
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import type { SupabaseClient } from '@supabase/supabase-js';
-
-export const supabase: SupabaseClient = createClientComponentClient();
+import { supabase } from '@/lib/supabase/client';
+export { supabase };
 
 // ----------------------
 // Types
@@ -96,31 +94,19 @@ export async function getClassesAndSubjectsForCurrentSchool() {
 // Get enrollment roster for a specific term and class stream (class_id or stream identifier)
 export async function getEnrollmentRoster(termId: string, classIdOrStream: string) {
   try {
-    // Prefer class id exact match; if stream string is provided, we filter by stream
-    const isUUID = /^[0-9a-fA-F-]{36}$/.test(classIdOrStream);
-
-    const { data, error } = await supabase
+    const isClassId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(classIdOrStream);
+    let query = supabase
       .from('enrollments')
-      .select('id, student_id, class_id, term_id, school_id, status, students!inner(id,first_name,last_name,registration_number)')
-      .match({ term_id: termId })
-      .filter('class_id', isUUID ? 'eq' : 'in', isUUID ? classIdOrStream : null)
-      .order('status', { ascending: true });
+      .select('id, student_id, class_id, term_id, school_id, status, students!inner(id,first_name,last_name,registration_number), classes!inner(stream)')
+      .eq('term_id', termId);
 
-    // Fallback: if not a UUID, filter enrolments by joining on classes.stream
-    if (error && !isUUID) {
-      // Try join through classes by stream
-      const { data: joinedData, error: joinErr } = await supabase
-        .from('enrollments')
-        .select('enrollments(id,student_id,class_id,term_id,school_id,status), students(id,first_name,last_name,registration_number)')
-        .eq('term_id', termId)
-        .in('class_id', supabase.rpc ? [] : []); // placeholder to keep TS happy; we'll do client-side join below
-
-      if (joinErr) throw joinErr;
-
-      const filtered = (joinedData || []).filter((row: any) => row.enrollments && row.enrollments.class_id && row.enrollments.class_id === classIdOrStream);
-      return { data: filtered, error: null };
+    if (isClassId) {
+      query = query.eq('class_id', classIdOrStream);
+    } else {
+      query = query.eq('classes.stream', classIdOrStream);
     }
 
+    const { data, error } = await query.order('status', { ascending: true });
     if (error) throw error;
 
     return { data, error: null };

@@ -5,8 +5,9 @@ export interface AuthProfile {
   id: string;
   user_id: string;
   school_id: string;
-  role: 'admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
+  role: 'admin' | 'school_admin' | 'super_admin' | 'teacher' | 'student' | 'parent';
   roles?: string[];
+  is_active?: boolean;
   first_name?: string;
   last_name?: string;
   email?: string;

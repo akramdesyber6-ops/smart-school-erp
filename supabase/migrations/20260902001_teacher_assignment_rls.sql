@@ -1,4 +1,4 @@
--- =====================================================================
+﻿-- =====================================================================
 -- Teacher Assignment & Role-Based Access Control
 -- Date: 2026-09-02
 -- Purpose: Implement teacher-specific RLS to restrict access based on
@@ -25,7 +25,7 @@ create or replace function policies.is_teacher_for_class_subject(
   target_subject_id uuid
 )
 returns boolean language sql stable security definer set search_path = public, auth as $$
-  select 
+  select
     -- First, determine the school_id from the target class
     (select policies.is_school_admin(c.school_id)
      from public.classes c
@@ -56,7 +56,7 @@ $$;
 -- =====================================================================
 create or replace function policies.is_teacher_for_class(target_class_id uuid)
 returns boolean language sql stable security definer set search_path = public, auth as $$
-  select 
+  select
     (select policies.is_school_admin(c.school_id)
      from public.classes c
      where c.id = target_class_id

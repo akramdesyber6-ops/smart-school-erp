@@ -29,14 +29,13 @@ Smart School ERP is a modern, scalable multi-tenant SaaS platform that enables s
 - **Database**: Supabase PostgreSQL
 - **Authentication**: Supabase Auth
 - **File Storage**: Supabase Storage
-- **Security**: Row Level Security (RLS) on every table
+- **Security**: Tenant-scoped RLS policies are defined in the tracked Supabase migration; live enforcement is not yet verified
 
 ## 🔐 Architecture
 
 ### Multi-Tenant Design
 - Every business table includes `school_id` for data isolation
-- Row Level Security (RLS) enforces data isolation at the database level
-- Schools cannot access another school's data
+- The tracked RLS migration defines tenant isolation and role-specific policies for the listed school tables
 
 ### User Roles
 1. **SUPER_ADMIN** - Platform administrators
@@ -68,8 +67,7 @@ smart-school-erp/
 │   └── ui/                           # Shared UI components
 ├── supabase/
 │   ├── migrations/                   # SQL migrations
-│   ├── policies/                     # RLS policies
-│   └── seed/                         # Seed data
+│   └── seed.sql                      # Example data (requires the core schema)
 ├── docs/
 │   ├── ARCHITECTURE.md               # Architecture documentation
 │   ├── DATABASE.md                   # Database schema documentation
@@ -167,11 +165,22 @@ pnpm run dev
 ## 🔒 Security
 
 - TypeScript strict mode for type safety
-- Row Level Security (RLS) on all database tables
+- Row Level Security (RLS) on tenant-sensitive tables
 - Supabase Auth for authentication
 - Environment variable management
 - Input validation with Zod
 - CORS and security headers configured
+- Explicit school/tenant checks before access to a row or dashboard
+
+### Security notes
+
+- The app must only read/write rows whose `school_id` matches the currently authenticated user’s tenant context.
+- Teacher and parent access must be enforced by assignment checks and current-user identity, not by client-only route names.
+- The canonical role and tenant RLS policies are in `supabase/migrations/20261008_rls_hardening.sql`. The obsolete `supabase/policies/01_tenant_isolation.sql` was removed because its policy syntax and row references were invalid for PostgreSQL.
+- The repository does not include a base-schema migration for the core school tables used by the seed and dashboards. Apply the verified schema first, then the tracked migrations; the RLS migration has not been validated against a live Supabase project in this repository.
+- Student self-service records require a database relationship from `profiles.user_id` to a student row. That relationship is not present in the tracked schema, so the student dashboard intentionally does not guess a student based on school membership.
+- Parent records currently link to authenticated profiles by matching email because the schema has no `parents.user_id`; production use requires confirmed Supabase email identities and validated unique parent records.
+- Do not consider this project production-ready until the core schema and migrations are applied to a live Supabase tenant and authentication, tenant isolation, and role-specific access have been verified with separate test accounts.
 
 ## 📦 Deployment
 

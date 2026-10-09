@@ -1,3 +1,0 @@
--- The deployable Row Level Security definition is versioned with the schema.
--- Apply supabase/migrations/202608080002_tenant_rls.sql through `supabase db push`.
--- Keep manual policy changes out of the Supabase dashboard so environments remain reproducible.

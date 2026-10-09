@@ -1,16 +1,65 @@
 /** Centralized authentication navigation rules. */
 
-export type ApplicationRole = 'admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
+export type ApplicationRole = 'admin' | 'school_admin' | 'super_admin' | 'teacher' | 'student' | 'parent';
 
 export type RouteContext = {
   pathname: string;
 };
 
-const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
-const ROLE_RESTRICTED_ROUTES: ReadonlyArray<{ prefix: string; allowedRoles: readonly ApplicationRole[] }> = [
-  { prefix: '/dashboards/school-admin', allowedRoles: ['admin', 'school_admin'] },
-  { prefix: '/dashboards/teacher', allowedRoles: ['admin', 'teacher'] },
+type RoleRoute = {
+  roles: readonly ApplicationRole[];
+  target: string;
+  routes: readonly string[];
+  exactRoutes?: readonly string[];
+};
+
+const APPLICATION_ROLES: readonly ApplicationRole[] = [
+  'admin',
+  'school_admin',
+  'super_admin',
+  'teacher',
+  'student',
+  'parent',
 ];
+
+const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
+
+const ROLE_ROUTES: readonly RoleRoute[] = [
+  {
+    roles: ['admin', 'school_admin', 'super_admin'],
+    target: '/admin',
+    routes: ['/admin', '/school-admin-dashboard', '/dashboards/school-admin', '/dashboards/admin'],
+  },
+  {
+    roles: ['teacher'],
+    target: '/teacher-dashboard',
+    routes: ['/teacher-dashboard', '/dashboards/teacher', '/dashboard/marks'],
+  },
+  {
+    roles: ['student'],
+    target: '/dashboard',
+    routes: ['/student-dashboard', '/dashboards/student'],
+    exactRoutes: ['/dashboard'],
+  },
+  {
+    roles: ['parent'],
+    target: '/parent-dashboard',
+    routes: ['/parent-dashboard', '/dashboards/parent'],
+  },
+];
+
+export function normalizeRoles(values: unknown): string[] {
+  const candidates = Array.isArray(values)
+    ? values
+    : typeof values === 'string'
+      ? values.split(',')
+      : [];
+
+  return candidates
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 export function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTE_PREFIXES.some(
@@ -18,41 +67,54 @@ export function isPublicRoute(pathname: string): boolean {
   );
 }
 
-export function getDashboardPathForRole(role: unknown): string {
-  if (role === 'admin' || role === 'school_admin') return '/dashboards/school-admin';
-  if (role === 'teacher') return '/dashboards/teacher';
+export function getRoles(payload: Record<string, unknown>): ApplicationRole[] {
+  const values = [
+    ...normalizeRoles(payload.role),
+    ...normalizeRoles(payload.roles),
+    ...normalizeRoles(payload['x-hasura-allowed-roles']),
+  ];
 
-  // Student and parent portals are not implemented yet. Keep them on the public
-  // landing page instead of navigating them to a route that does not exist.
-  return '/';
+  return [...new Set(values.filter((role): role is ApplicationRole =>
+    APPLICATION_ROLES.includes(role as ApplicationRole)
+  ))];
 }
 
-export function getRoles(payload: Record<string, unknown>): ApplicationRole[] {
-  const roleClaims = [payload.role, payload.roles, payload['x-hasura-allowed-roles']];
-  const applicationRoles: ApplicationRole[] = ['admin', 'school_admin', 'teacher', 'student', 'parent'];
+export function getDashboardPathForRole(role: unknown): string {
+  const normalizedRole = typeof role === 'string' ? role.toLowerCase() : '';
+  return ROLE_ROUTES.find((route) => route.roles.includes(normalizedRole as ApplicationRole))?.target ?? '/';
+}
 
-  return roleClaims.flatMap((claim) => {
-    const values = Array.isArray(claim) ? claim : typeof claim === 'string' ? [claim] : [];
-    return values.filter((value): value is ApplicationRole => applicationRoles.includes(value as ApplicationRole));
-  });
+function routeForPath(pathname: string): RoleRoute | undefined {
+  return ROLE_ROUTES.find((route) =>
+    route.routes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)) ||
+    route.exactRoutes?.includes(pathname)
+  );
 }
 
 export function canAccessRoute(roles: readonly ApplicationRole[], pathname: string): boolean {
-  const restriction = ROLE_RESTRICTED_ROUTES.find(
-    ({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-
-  return !restriction || restriction.allowedRoles.some((role) => roles.includes(role));
+  const route = routeForPath(pathname);
+  return !route || route.roles.some((role) => roles.includes(role));
 }
 
 export async function processSecureRedirects(
   payload: Record<string, unknown> | null,
   context: RouteContext
 ): Promise<string | null> {
-  if (!payload) return isPublicRoute(context.pathname) ? null : '/login';
+  const { pathname } = context;
 
-  const destination = getDashboardPathForRole(getRoles(payload)[0]);
-  if (context.pathname === '/' || context.pathname === '/login') return destination === '/' ? null : destination;
+  if (!payload) return isPublicRoute(pathname) ? null : '/login';
+
+  const roles = getRoles(payload);
+  const primaryRole = roles[0];
+  const destination = getDashboardPathForRole(primaryRole);
+
+  if (pathname === '/' || pathname === '/login') {
+    return destination === '/' ? null : destination;
+  }
+
+  if (!routeForPath(pathname)) return null;
+  if (roles.length === 0) return '/login';
+  if (!canAccessRoute(roles, pathname)) return destination;
 
   return null;
 }
