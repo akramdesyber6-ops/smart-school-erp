@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/useAuthStore';
 import { supabase } from '@/lib/supabase/api';
+import DashboardAccountActions from '@/components/DashboardAccountActions';
 import {
   BookOpen,
   AlertCircle,
@@ -36,6 +37,19 @@ interface StudentEnrollment {
     last_name: string;
     registration_number: string;
   };
+}
+
+interface TeacherAssignment {
+  class_id: string;
+  subject_id: string;
+  subject_name: string;
+}
+
+interface TeacherTerm {
+  id: string;
+  name: string;
+  start_date: string;
+  is_current: boolean;
 }
 
 interface MarkbookEntry {
@@ -81,7 +95,7 @@ const mapGradeToNcdcDivision = (percentage: number | null): string | null => {
   return 'F9';
 };
 
-const generateAiLessonPlan = (subject: string, topic: string, curriculum: string): LessonPlan => {
+const generateLessonPlanTemplate = (subject: string, topic: string, curriculum: string): LessonPlan => {
   const isNcdc = curriculum === 'NCDC';
   return {
     topic: `${topic} (${subject})`,
@@ -118,7 +132,11 @@ export default function TeacherDashboard(): JSX.Element {
 
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [classes, setClasses] = useState<TeacherClass[]>([]);
+  const [classSubjects, setClassSubjects] = useState<TeacherAssignment[]>([]);
+  const [terms, setTerms] = useState<TeacherTerm[]>([]);
   const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const [selectedTermId, setSelectedTermId] = useState('');
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([]);
   const [markbookData, setMarkbookData] = useState<Map<string, MarkbookEntry>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -151,16 +169,38 @@ export default function TeacherDashboard(): JSX.Element {
       setIsAuthorized(true);
 
       try {
-        // Fetch classes assigned to this teacher
-        const { data: classesData, error: classesError } = await supabase
-          .from('classes')
-          .select('id, name, stream, school_id, curriculum')
-          .eq('school_id', activeSchoolId)
-          .order('name', { ascending: true });
+        const { data: assignmentsData, error: assignmentsError } = await supabase
+          .from('class_subjects')
+          .select('class_id, subject_id, classes!inner(id, name, stream, school_id, curriculum), subjects!inner(id, name)')
+          .eq('teacher_id', profile.id)
+          .eq('classes.school_id', activeSchoolId);
 
-        if (classesError && classesError.code !== 'PGRST116') throw classesError;
-        const fetchedClasses = (classesData as any[]) || [];
+        if (assignmentsError) throw assignmentsError;
+        const assignments = (assignmentsData || []) as any[];
+        const fetchedClasses = [...new Map(
+          assignments
+            .map((assignment) => assignment.classes)
+            .filter((classRow) => classRow?.id)
+            .map((classRow) => [classRow.id, classRow])
+        ).values()] as TeacherClass[];
+
+        setClassSubjects(assignments.map((assignment) => ({
+          class_id: assignment.class_id,
+          subject_id: assignment.subject_id,
+          subject_name: assignment.subjects?.name ?? '',
+        })));
         setClasses(fetchedClasses);
+
+        const { data: termsData, error: termsError } = await supabase
+          .from('academic_terms')
+          .select('id, name, start_date, is_current')
+          .eq('school_id', activeSchoolId)
+          .order('start_date', { ascending: false });
+
+        if (termsError) throw termsError;
+        const fetchedTerms = (termsData || []) as TeacherTerm[];
+        setTerms(fetchedTerms);
+        setSelectedTermId(fetchedTerms.find((term) => term.is_current)?.id ?? fetchedTerms[0]?.id ?? '');
 
         if (fetchedClasses.length > 0) {
           setSelectedClass(fetchedClasses[0]);
@@ -176,11 +216,31 @@ export default function TeacherDashboard(): JSX.Element {
     checkAuthAndLoad();
   }, [profile, activeSchoolId, router]);
 
+  useEffect(() => {
+    if (!selectedClass) {
+      setSelectedSubjectId('');
+      return;
+    }
+    const subjectsForClass = classSubjects.filter((assignment) => assignment.class_id === selectedClass.id);
+    setSelectedSubjectId((current) =>
+      subjectsForClass.some((assignment) => assignment.subject_id === current)
+        ? current
+        : subjectsForClass[0]?.subject_id ?? ''
+    );
+  }, [selectedClass, classSubjects]);
+
   // Load enrollments when class changes
   useEffect(() => {
+    let active = true;
     const loadEnrollments = async () => {
-      if (!selectedClass || !activeSchoolId) return;
+      if (!selectedClass || !activeSchoolId || !selectedSubjectId || !selectedTermId) {
+        setEnrollments([]);
+        setMarkbookData(new Map());
+        setLoading(false);
+        return;
+      }
       setLoading(true);
+      setError(null);
       setMarkbookData(new Map());
       try {
         const { data: enrollmentsData, error: enrollmentsError } = await supabase
@@ -189,10 +249,12 @@ export default function TeacherDashboard(): JSX.Element {
             'id, student_id, class_id, term_id, status, students!inner(id, first_name, last_name, registration_number)'
           )
           .eq('class_id', selectedClass.id)
+          .eq('term_id', selectedTermId)
           .eq('school_id', activeSchoolId)
           .order('students.first_name', { ascending: true });
 
-        if (enrollmentsError && enrollmentsError.code !== 'PGRST116') throw enrollmentsError;
+        if (!active) return;
+        if (enrollmentsError) throw enrollmentsError;
         setEnrollments((enrollmentsData || []) as unknown as StudentEnrollment[]);
 
         // Load existing markbook entries
@@ -200,23 +262,30 @@ export default function TeacherDashboard(): JSX.Element {
           .from('markbook_entries')
           .select('*')
           .eq('class_id', selectedClass.id)
+          .eq('subject_id', selectedSubjectId)
+          .eq('term_id', selectedTermId)
           .eq('school_id', activeSchoolId);
 
-        if (markbookError && markbookError.code !== 'PGRST116') throw markbookError;
+        if (!active) return;
+        if (markbookError) throw markbookError;
         const newMarkbookMap = new Map<string, MarkbookEntry>();
         (markbookData || []).forEach((entry: any) => {
           newMarkbookMap.set(entry.student_id, entry as MarkbookEntry);
         });
         setMarkbookData(newMarkbookMap);
       } catch (err: any) {
+        if (!active) return;
         setError(err?.message || 'Failed to load enrollments.');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    loadEnrollments();
-  }, [selectedClass, activeSchoolId]);
+    void loadEnrollments();
+    return () => {
+      active = false;
+    };
+  }, [selectedClass, activeSchoolId, selectedSubjectId, selectedTermId]);
 
   // Calculate total percentage for NCDC
   const calculateNcdcTotal = (
@@ -230,51 +299,78 @@ export default function TeacherDashboard(): JSX.Element {
 
   // Save markbook entry
   const saveMarkbookEntry = async (studentId: string, entry: MarkbookEntry) => {
-    if (!selectedClass || !activeSchoolId) return;
+    if (!selectedClass || !activeSchoolId || !selectedSubjectId || !selectedTermId) {
+      setError('Select an assigned subject and academic term before saving marks.');
+      return;
+    }
+    if (
+      selectedClass.curriculum === 'CBC' &&
+      entry.competency_score != null &&
+      (entry.competency_score < 1 || entry.competency_score > 3)
+    ) {
+      setError('CBC competency scores must be between 1 and 3.');
+      return;
+    }
+    if (
+      selectedClass.curriculum !== 'CBC' &&
+      (
+        (entry.bot_score != null && (entry.bot_score < 0 || entry.bot_score > 10)) ||
+        (entry.mot_score != null && (entry.mot_score < 0 || entry.mot_score > 20)) ||
+        (entry.eot_score != null && (entry.eot_score < 0 || entry.eot_score > 70))
+      )
+    ) {
+      setError('NCDC scores must be within the allowed BOT (0–10), MOT (0–20), and EOT (0–70) ranges.');
+      return;
+    }
     setSaving(true);
+    setError(null);
     try {
-      const entryToSave: Partial<MarkbookEntry> = {
-        ...entry,
+      const entryToSave = {
+        competency_score: entry.competency_score ?? null,
+        observation: entry.observation ?? null,
+        bot_score: entry.bot_score ?? null,
+        mot_score: entry.mot_score ?? null,
+        eot_score: entry.eot_score ?? null,
+        total_percentage: entry.total_percentage ?? null,
+        raw_score: entry.raw_score ?? null,
+        grade: entry.grade ?? null,
+        descriptor: entry.descriptor ?? null,
+        competency_code: entry.competency_code ?? null,
         student_id: studentId,
         class_id: selectedClass.id,
-        subject_id: entry.subject_id || 'default-subject',
-        term_id: entry.term_id || 'current-term',
+        subject_id: selectedSubjectId,
+        term_id: selectedTermId,
         school_id: activeSchoolId,
       };
 
       // For CBC, save competency score and observation
       if (selectedClass.curriculum === 'CBC') {
-        const { error: err } = await supabase.from('markbook_entries').upsert(
-          {
-            ...entryToSave,
-            competency_score: entry.competency_score,
-            observation: entry.observation,
-          },
-          { onConflict: 'student_id,class_id' }
-        );
-        if (err) throw err;
+        entryToSave.competency_score = entry.competency_score ?? null;
       } else {
         // For NCDC, calculate and save total percentage and grade
         const total = calculateNcdcTotal(entry.bot_score, entry.mot_score, entry.eot_score);
-        const grade = mapGradeToNcdcDivision(total);
-        const { error: err } = await supabase.from('markbook_entries').upsert(
-          {
-            ...entryToSave,
-            bot_score: entry.bot_score,
-            mot_score: entry.mot_score,
-            eot_score: entry.eot_score,
-            total_percentage: total,
-            grade: grade,
-            raw_score: total ? Math.round(total) : null,
-          },
-          { onConflict: 'student_id,class_id' }
-        );
-        if (err) throw err;
+        entryToSave.total_percentage = total;
+        entryToSave.grade = mapGradeToNcdcDivision(total);
+        entryToSave.raw_score = total === null ? null : Math.round(total);
       }
 
-      const updated = new Map(markbookData);
-      updated.set(studentId, entry);
-      setMarkbookData(updated);
+      const savedEntry = entry.id
+        ? await supabase
+          .from('markbook_entries')
+          .update(entryToSave)
+          .eq('id', entry.id)
+          .eq('school_id', activeSchoolId)
+          .select('*')
+          .single()
+        : await supabase
+          .from('markbook_entries')
+          .insert(entryToSave)
+          .select('*')
+          .single();
+
+      if (savedEntry.error) throw savedEntry.error;
+
+      setMarkbookData((current) => new Map(current).set(studentId, savedEntry.data as MarkbookEntry));
       setSuccess('Grades saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
@@ -285,51 +381,39 @@ export default function TeacherDashboard(): JSX.Element {
   };
 
   // Handle CBC competency score change
-  const handleCbcScoreChange = (studentId: string, score: number) => {
-    const entry =
-      markbookData.get(studentId) ||
-      ({
-        student_id: studentId,
-        class_id: selectedClass?.id || '',
-        school_id: activeSchoolId || '',
-        subject_id: '',
-        term_id: '',
-      } as MarkbookEntry);
-    entry.competency_score = score;
-    saveMarkbookEntry(studentId, entry as MarkbookEntry);
+  const handleCbcScoreChange = (studentId: string, score: number | null) => {
+    const entry = getDraftEntry(studentId);
+    entry.competency_score = score !== null && Number.isFinite(score) ? score : null;
+    setMarkbookData((current) => new Map(current).set(studentId, entry));
   };
 
   // Handle CBC observation change
   const handleCbcObservationChange = (studentId: string, observation: string) => {
-    const entry =
-      markbookData.get(studentId) ||
-      ({
-        student_id: studentId,
-        class_id: selectedClass?.id || '',
-        school_id: activeSchoolId || '',
-        subject_id: '',
-        term_id: '',
-      } as MarkbookEntry);
+    const entry = getDraftEntry(studentId);
     entry.observation = observation;
+    setMarkbookData((current) => new Map(current).set(studentId, entry));
   };
 
   // Handle NCDC score change
-  const handleNcdcScoreChange = (studentId: string, field: 'bot' | 'mot' | 'eot', value: number) => {
-    const entry =
-      markbookData.get(studentId) ||
-      ({
-        student_id: studentId,
-        class_id: selectedClass?.id || '',
-        school_id: activeSchoolId || '',
-        subject_id: '',
-        term_id: '',
-      } as MarkbookEntry);
-    if (field === 'bot') entry.bot_score = value;
-    if (field === 'mot') entry.mot_score = value;
-    if (field === 'eot') entry.eot_score = value;
-    const nextMap = new Map(markbookData);
-    nextMap.set(studentId, entry as MarkbookEntry);
-    setMarkbookData(nextMap);
+  const handleNcdcScoreChange = (studentId: string, field: 'bot' | 'mot' | 'eot', value: number | null) => {
+    const entry = getDraftEntry(studentId);
+    const score = value !== null && Number.isFinite(value) ? value : null;
+    if (field === 'bot') entry.bot_score = score;
+    if (field === 'mot') entry.mot_score = score;
+    if (field === 'eot') entry.eot_score = score;
+    setMarkbookData((current) => new Map(current).set(studentId, entry));
+  };
+
+  const getDraftEntry = (studentId: string): MarkbookEntry => {
+    const existing = markbookData.get(studentId);
+    if (existing) return { ...existing };
+    return {
+      student_id: studentId,
+      class_id: selectedClass?.id ?? '',
+      subject_id: selectedSubjectId,
+      term_id: selectedTermId,
+      school_id: activeSchoolId ?? '',
+    };
   };
 
   // Save NCDC scores
@@ -346,7 +430,7 @@ export default function TeacherDashboard(): JSX.Element {
       return;
     }
     const curriculum = selectedClass?.curriculum || 'CBC';
-    const plan = generateAiLessonPlan(lessonSubject, lessonTopic, curriculum);
+    const plan = generateLessonPlanTemplate(lessonSubject, lessonTopic, curriculum);
     setLessonPlan(plan);
     setSuccess('Lesson plan generated successfully!');
     setTimeout(() => setSuccess(null), 3000);
@@ -419,9 +503,12 @@ ${lessonPlan.assessment}
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
-          <p className="text-gray-500 mt-1">Manage grades, lessons, and student progress</p>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6 lg:px-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
+            <p className="text-gray-500 mt-1">Manage grades, lessons, and student progress</p>
+          </div>
+          <DashboardAccountActions />
         </div>
       </div>
 
@@ -453,9 +540,11 @@ ${lessonPlan.assessment}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Class Selector */}
         {classes.length > 0 && (
-          <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Class Stream</label>
+          <div className="mb-8 flex flex-wrap items-end gap-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="teacher-class">Select Class Stream</label>
             <select
+              id="teacher-class"
               value={selectedClass?.id || ''}
               onChange={(e) => {
                 const cls = classes.find((c) => c.id === e.target.value);
@@ -469,6 +558,44 @@ ${lessonPlan.assessment}
                 </option>
               ))}
             </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="teacher-subject">Assigned Subject</label>
+              <select
+                id="teacher-subject"
+                value={selectedSubjectId}
+                onChange={(event) => setSelectedSubjectId(event.target.value)}
+                disabled={!selectedClass}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {classSubjects
+                  .filter((assignment) => assignment.class_id === selectedClass?.id)
+                  .map((assignment) => (
+                    <option key={assignment.subject_id} value={assignment.subject_id}>{assignment.subject_name}</option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="teacher-term">Academic Term</label>
+              <select
+                id="teacher-term"
+                value={selectedTermId}
+                onChange={(event) => setSelectedTermId(event.target.value)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {terms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+        {classes.length === 0 && (
+          <div className="mb-8 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
+            No class and subject assignments are linked to your teacher profile.
+          </div>
+        )}
+        {classes.length > 0 && (!selectedSubjectId || !selectedTermId) && (
+          <div className="mb-8 rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
+            Select an assigned subject and academic term to open the gradebook.
           </div>
         )}
 
@@ -528,6 +655,7 @@ ${lessonPlan.assessment}
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Reg. Number</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Competency Score</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Observation</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -541,8 +669,11 @@ ${lessonPlan.assessment}
                             <td className="px-6 py-4 text-sm text-gray-600">{enrollment.students?.registration_number}</td>
                             <td className="px-6 py-4 text-sm">
                               <select
-                                value={entry?.competency_score || ''}
-                                onChange={(e) => handleCbcScoreChange(enrollment.student_id, parseInt(e.target.value))}
+                                value={entry?.competency_score ?? ''}
+                                onChange={(e) => handleCbcScoreChange(
+                                  enrollment.student_id,
+                                  e.target.value === '' ? null : Number(e.target.value)
+                                )}
                                 className="px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               >
                                 <option value="">—</option>
@@ -559,6 +690,19 @@ ${lessonPlan.assessment}
                                 className="w-full px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                                 rows={2}
                               />
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              <button
+                                onClick={() => {
+                                  const currentEntry = markbookData.get(enrollment.student_id);
+                                  if (currentEntry) void saveMarkbookEntry(enrollment.student_id, currentEntry);
+                                }}
+                                disabled={saving || !markbookData.has(enrollment.student_id)}
+                                className="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                              >
+                                {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Save
+                              </button>
                             </td>
                           </tr>
                         );
@@ -583,7 +727,7 @@ ${lessonPlan.assessment}
                     <tbody>
                       {enrollments.map((enrollment) => {
                         const entry = markbookData.get(enrollment.student_id);
-                        const total = calculateNcdcTotal(entry?.bot_score || null, entry?.mot_score || null, entry?.eot_score || null);
+                        const total = calculateNcdcTotal(entry?.bot_score ?? null, entry?.mot_score ?? null, entry?.eot_score ?? null);
                         const grade = mapGradeToNcdcDivision(total);
                         return (
                           <tr key={enrollment.student_id} className="border-t hover:bg-gray-50">
@@ -597,7 +741,11 @@ ${lessonPlan.assessment}
                                 min="0"
                                 max="10"
                                 value={entry?.bot_score ?? ''}
-                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'bot', parseFloat(e.target.value))}
+                                onChange={(e) => handleNcdcScoreChange(
+                                  enrollment.student_id,
+                                  'bot',
+                                  e.target.value === '' ? null : Number(e.target.value)
+                                )}
                                 placeholder="0"
                                 className="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                               />
@@ -608,7 +756,11 @@ ${lessonPlan.assessment}
                                 min="0"
                                 max="20"
                                 value={entry?.mot_score ?? ''}
-                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'mot', parseFloat(e.target.value))}
+                                onChange={(e) => handleNcdcScoreChange(
+                                  enrollment.student_id,
+                                  'mot',
+                                  e.target.value === '' ? null : Number(e.target.value)
+                                )}
                                 placeholder="0"
                                 className="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                               />
@@ -619,7 +771,11 @@ ${lessonPlan.assessment}
                                 min="0"
                                 max="70"
                                 value={entry?.eot_score ?? ''}
-                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'eot', parseFloat(e.target.value))}
+                                onChange={(e) => handleNcdcScoreChange(
+                                  enrollment.student_id,
+                                  'eot',
+                                  e.target.value === '' ? null : Number(e.target.value)
+                                )}
                                 placeholder="0"
                                 className="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                               />
@@ -660,7 +816,7 @@ ${lessonPlan.assessment}
           <div className="space-y-6">
             {/* Generate Lesson Plan */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">AI Lesson Plan Generator</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Lesson Plan Template Generator</h2>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

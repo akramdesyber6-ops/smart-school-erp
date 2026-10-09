@@ -89,27 +89,23 @@ export function useSaveMarks(
 
         return result;
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
         if (err instanceof AssessmentServiceError) {
-          setError(err.message);
+          setError(errorMessage);
           setErrorCode(err.code);
-          options.onError?.(err.message);
-          console.error(
-            `Assessment Service Error [${err.code}]: ${err.message}`,
-            err.details
-          );
+          options.onError?.(errorMessage);
+          console.error(`Assessment Service Error [${err.code}]: ${errorMessage}`, err.details);
         } else {
-          const message =
-            err instanceof Error ? err.message : 'Unknown error occurred';
-          setError(message);
-          options.onError?.(message);
-          console.error('Unexpected error saving marks:', message);
+          setError(errorMessage);
+          options.onError?.(errorMessage);
+          console.error('Unexpected error saving marks:', errorMessage);
         }
 
         return {
           success: false,
           savedCount: 0,
           failedCount: params.marks.length,
-          error: error || 'Unknown error',
+          error: errorMessage,
         };
       } finally {
         setSaving(false);

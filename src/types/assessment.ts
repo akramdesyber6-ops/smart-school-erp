@@ -19,7 +19,7 @@ export interface Student {
   id: string; // OU-STD-2026-XXXX format
   firstName: string;
   lastName: string;
-  stream: 'East' | 'West' | 'North' | 'South';
+  stream: string;
   class: string; // e.g., "Senior One"
   admissionNumber?: string;
   photoUrl?: string;
@@ -47,6 +47,7 @@ export interface SubjectAssessment {
  */
 export interface StudentGradeReport {
   student: Student;
+  school: SchoolProfile;
   class: string;
   term: string; // e.g., "Term 1 2026"
   academicYear: string;
@@ -91,10 +92,10 @@ export interface GradeRangeMapping {
  */
 export interface SchoolProfile {
   name: string;
-  location: string;
-  motto: string;
-  contactEmail: string;
-  contactPhone: string;
+  location?: string | null;
+  motto?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   logoUrl?: string;
   letterheadBgColor?: string; // Tailwind class
 }

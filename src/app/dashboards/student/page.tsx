@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, BookOpen, CheckCircle, ClipboardCheck, GraduationCap, Loader, TrendingUp, UserCircle } from 'lucide-react';
 import useAuthStore from '@/lib/stores/useAuthStore';
-import { supabase } from '@/lib/supabase/api';
+import DashboardAccountActions from '@/components/DashboardAccountActions';
 
 interface StudentOverview {
   id: string;
@@ -40,6 +40,7 @@ export default function StudentDashboard(): JSX.Element {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [linkMissing, setLinkMissing] = useState(false);
   const [student, setStudent] = useState<StudentOverview | null>(null);
   const [enrollments, setEnrollments] = useState<EnrollmentOverview[]>([]);
   const [results, setResults] = useState<ResultOverview[]>([]);
@@ -48,85 +49,23 @@ export default function StudentDashboard(): JSX.Element {
     const loadStudentDashboard = async () => {
       if (!profile || !activeSchoolId) {
         setError('Unauthorized: Missing authentication or school context.');
-        setTimeout(() => router.push('/login'), 2000);
+        setLoading(false);
+        router.replace('/login');
         return;
       }
 
       if (profile.role !== 'student') {
         setError('Unauthorized: Only students can access this dashboard.');
-        setTimeout(() => router.push('/dashboard'), 2000);
+        setLoading(false);
+        router.replace('/dashboard');
         return;
       }
 
-      try {
-        const requestedStudentId = (profile as any)?.student_id || (profile as any)?.studentId;
-
-        let query = supabase.from('students').select('*').eq('school_id', activeSchoolId).eq('is_active', true);
-
-        if (requestedStudentId) {
-          query = query.eq('id', requestedStudentId);
-        }
-
-        const { data: studentRows, error: studentError } = await query.order('created_at', { ascending: false }).limit(1);
-        if (studentError) throw studentError;
-
-        const nextStudent = studentRows?.[0] ?? null;
-        if (!nextStudent) {
-          setStudent(null);
-          setEnrollments([]);
-          setResults([]);
-          setLoading(false);
-          return;
-        }
-
-        setStudent(nextStudent);
-
-        const { data: enrollmentRows, error: enrollmentError } = await supabase
-          .from('enrollments')
-          .select('id, status, class_id, term_id, classes!inner(id, name, stream, curriculum), academic_terms!inner(id, name)')
-          .eq('school_id', activeSchoolId)
-          .eq('student_id', nextStudent.id)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (enrollmentError && enrollmentError.code !== 'PGRST116') throw enrollmentError;
-
-        setEnrollments(
-          (enrollmentRows || []).map((row: any) => ({
-            id: row.id,
-            status: row.status,
-            class_name: row.classes?.name ?? 'N/A',
-            stream: row.classes?.stream ?? 'General',
-            term_name: row.academic_terms?.name ?? 'Current Term',
-          }))
-        );
-
-        const { data: resultRows, error: resultError } = await supabase
-          .from('markbook_entries')
-          .select('id, subject_id, term_id, descriptor, competency_score, observation, subjects!inner(id, name), academic_terms!inner(id, name)')
-          .eq('school_id', activeSchoolId)
-          .eq('student_id', nextStudent.id)
-          .order('created_at', { ascending: false })
-          .limit(12);
-
-        if (resultError && resultError.code !== 'PGRST116') throw resultError;
-
-        setResults(
-          (resultRows || []).map((row: any) => ({
-            id: row.id,
-            subject_name: row.subjects?.name ?? 'Subject',
-            descriptor: row.descriptor ?? 'Pending',
-            competency_score: row.competency_score ?? null,
-            observation: row.observation ?? 'No observation recorded yet.',
-            term_name: row.academic_terms?.name ?? 'Current Term',
-          }))
-        );
-      } catch (err: any) {
-        console.error('Student dashboard error:', err);
-        setError(err?.message || 'Failed to load your dashboard.');
-      } finally {
-        setLoading(false);
-      }
+      setStudent(null);
+      setEnrollments([]);
+      setResults([]);
+      setLinkMissing(true);
+      setLoading(false);
     };
 
     loadStudentDashboard();
@@ -172,8 +111,15 @@ export default function StudentDashboard(): JSX.Element {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
           <UserCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">No student profile found</h2>
-          <p className="text-gray-600">Your account has not been linked to a student record in this school.</p>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Student record not linked</h2>
+          <p className="text-gray-600">
+            {linkMissing
+              ? 'The current database schema does not link a student login to a student record. Your school administrator must establish that relationship before academic records can be shown safely.'
+              : 'No student profile is available for this account.'}
+          </p>
+          <div className="mt-6 flex justify-center">
+            <DashboardAccountActions />
+          </div>
         </div>
       </div>
     );
@@ -188,9 +134,12 @@ export default function StudentDashboard(): JSX.Element {
               <p className="text-sm font-medium uppercase tracking-[0.2em] text-indigo-600">Student Portal</p>
               <h1 className="text-3xl font-bold text-slate-900">{student.first_name} {student.last_name}</h1>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
-              <GraduationCap className="h-4 w-4" />
-              {student.registration_number}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
+                <GraduationCap className="h-4 w-4" />
+                {student.registration_number}
+              </div>
+              <DashboardAccountActions />
             </div>
           </div>
         </div>

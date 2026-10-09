@@ -2,7 +2,7 @@
   "name": "smart-school-erp",
   "version": "0.1.0",
   "private": true,
-  "description": "Production-ready multi-tenant School ERP SaaS platform for Uganda and East Africa",
+  "description": "Multi-tenant School ERP SaaS platform for Uganda and East Africa",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

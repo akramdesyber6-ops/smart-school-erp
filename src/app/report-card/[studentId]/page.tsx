@@ -7,18 +7,8 @@
 
 import React, { useEffect, useState } from 'react';
 import ReportCard from '@/components/ReportCard';
-import { StudentGradeReport, SchoolProfile } from '@/types/assessment';
 import { useStudentGradeReport } from '@/hooks/useStudentGradeReport';
-
-// Mock school profile (could be fetched from config/database)
-const mockSchool: SchoolProfile = {
-  name: 'ONWARDS AND UPWARDS SECONDARY SCHOOL - BULOBA',
-  location: 'Buloba, Kampala, Uganda',
-  motto: 'Excellence Through Competence',
-  contactEmail: 'info@ou-schoolpilot.org',
-  contactPhone: '+256-701-234-567',
-  letterheadBgColor: 'bg-emerald-50',
-};
+import { getCurrentTermForStudent } from '@/services/assessment.service';
 
 interface ReportCardPageProps {
   params: {
@@ -77,19 +67,54 @@ function ErrorDisplay({ error, studentId }: { error: string; studentId: string }
  */
 export default function ReportCardPage({ params, searchParams }: ReportCardPageProps) {
   const { studentId } = params;
-  const termId = searchParams?.termId || 'current'; // Default to current term
+  const requestedTermId = searchParams?.termId?.trim() ?? '';
+  const [resolvedTermId, setResolvedTermId] = useState('');
+  const [termLoading, setTermLoading] = useState(!requestedTermId);
+  const [termError, setTermError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
 
-  // Use the custom hook to fetch grade report
+  useEffect(() => {
+    setIsClient(true);
+    if (requestedTermId) {
+      setResolvedTermId(requestedTermId);
+      setTermError(null);
+      setTermLoading(false);
+      return;
+    }
+
+    let active = true;
+    setTermLoading(true);
+    setTermError(null);
+    getCurrentTermForStudent(studentId)
+      .then((currentTermId) => {
+        if (!active) return;
+        if (!currentTermId) {
+          setTermError('No academic term is available for this student’s school.');
+          setResolvedTermId('');
+          return;
+        }
+        setResolvedTermId(currentTermId);
+      })
+      .catch((termLookupError: unknown) => {
+        if (!active) return;
+        setTermError(termLookupError instanceof Error ? termLookupError.message : 'Unable to load the current academic term.');
+        setResolvedTermId('');
+      })
+      .finally(() => {
+        if (active) setTermLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [studentId, requestedTermId]);
+
+  const termId = requestedTermId || resolvedTermId;
   const { report, loading, error, refetch } = useStudentGradeReport({
     studentId,
     termId,
+    enabled: Boolean(termId),
   });
-
-  // Ensure we only render on client side
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   if (!isClient) {
     return <ReportCardSkeleton />;
@@ -114,21 +139,21 @@ export default function ReportCardPage({ params, searchParams }: ReportCardPageP
         <div className="mx-auto max-w-4xl flex gap-3 px-4">
           <button
             onClick={() => window.print()}
-            disabled={loading}
+            disabled={loading || termLoading}
             className="rounded-lg bg-emerald-700 px-6 py-2 font-semibold text-white shadow hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             🖨️ Print
           </button>
           <button
             onClick={() => window.print()}
-            disabled={loading}
+            disabled={loading || termLoading}
             className="rounded-lg bg-blue-700 px-6 py-2 font-semibold text-white shadow hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             💾 Save as PDF
           </button>
           <button
             onClick={refetch}
-            disabled={loading}
+            disabled={loading || termLoading}
             className="rounded-lg bg-slate-600 px-6 py-2 font-semibold text-white shadow hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             🔄 Refresh
@@ -143,33 +168,33 @@ export default function ReportCardPage({ params, searchParams }: ReportCardPageP
       </div>
 
       {/* Loading State */}
-      {loading && (
+      {(loading || termLoading) && (
         <div className="mx-auto max-w-4xl px-4">
           <ReportCardSkeleton />
         </div>
       )}
 
       {/* Error State */}
-      {error && !loading && (
+      {(error || termError) && !loading && !termLoading && (
         <div className="mx-auto max-w-4xl px-4">
-          <ErrorDisplay error={error} studentId={studentId} />
+          <ErrorDisplay error={termError ?? error ?? 'Unable to load report card.'} studentId={studentId} />
         </div>
       )}
 
       {/* Success State - Report Card */}
-      {!loading && !error && report && (
+      {!loading && !termLoading && !error && !termError && report && (
         <div className="mx-auto max-w-4xl px-4">
           <div
             id="report-card"
             className="rounded-lg shadow-lg print:rounded-none print:shadow-none"
           >
-            <ReportCard report={report} school={mockSchool} showQRCode={true} />
+            <ReportCard report={report} school={report.school} />
           </div>
         </div>
       )}
 
       {/* No Data State */}
-      {!loading && !error && !report && (
+      {!loading && !termLoading && !error && !termError && !report && (
         <div className="mx-auto max-w-4xl px-4">
           <ErrorDisplay
             error="No report card found for this student"

@@ -26,6 +26,7 @@ interface ReportCardProps {
   report: StudentGradeReport;
   school: SchoolProfile;
   showQRCode?: boolean;
+  verificationUrl?: string;
 }
 
 interface AOIKeyEntry {
@@ -40,6 +41,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
   report,
   school,
   showQRCode = true,
+  verificationUrl,
 }) => {
   // Calculate overall statistics
   const overallStats = useMemo(() => {
@@ -75,8 +77,12 @@ export const ReportCard: React.FC<ReportCardProps> = ({
       }));
   }, [report.subjects]);
 
-  // Generate verification URL and QR payload
-  const verificationUrl = `https://ou-schoolpilot.org/verify/student/${report.student.id}`;
+  const schoolInitials = school.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join('');
 
   return (
     <article
@@ -99,7 +105,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
               />
             ) : (
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-700 text-white print:h-12 print:w-12">
-                <span className="text-2xl font-bold print:text-xl">OU</span>
+                <span className="text-2xl font-bold print:text-xl">{schoolInitials}</span>
               </div>
             )}
 
@@ -108,18 +114,18 @@ export const ReportCard: React.FC<ReportCardProps> = ({
               <h1 className="text-2xl font-bold text-emerald-900 print:text-xl">
                 {school.name}
               </h1>
-              <p className="text-sm font-semibold text-slate-600 print:text-xs">
-                {school.location}
-              </p>
-              <p className="text-xs italic text-slate-500 print:text-xs">
-                {`"${school.motto}"`}
-              </p>
+              {school.location && (
+                <p className="text-sm font-semibold text-slate-600 print:text-xs">{school.location}</p>
+              )}
+              {school.motto && (
+                <p className="text-xs italic text-slate-500 print:text-xs">{`"${school.motto}"`}</p>
+              )}
             </div>
 
             {/* Contact Info */}
             <div className="space-y-0.5 text-xs text-slate-600 print:text-xs">
-              <p>📧 {school.contactEmail}</p>
-              <p>📱 {school.contactPhone}</p>
+              {school.contactEmail && <p>📧 {school.contactEmail}</p>}
+              {school.contactPhone && <p>📱 {school.contactPhone}</p>}
             </div>
           </div>
         </header>
@@ -394,8 +400,8 @@ export const ReportCard: React.FC<ReportCardProps> = ({
         )}
 
         {/* ===== MODULE 3: QR CODE VERIFICATION FOOTER ===== */}
-        {showQRCode && (
-          <footer className="border-t-2 border-emerald-700 pt-6 print:page-break-inside-avoid">
+        <footer className="border-t-2 border-emerald-700 pt-6 print:page-break-inside-avoid">
+          {showQRCode && verificationUrl && (
             <div className="flex items-center justify-center gap-6 print:gap-4">
               <div className="flex flex-col items-center justify-center">
                 <div className="rounded-lg border-2 border-slate-300 bg-white p-2 print:border print:border-slate-300 print:p-1.5">
@@ -415,19 +421,18 @@ export const ReportCard: React.FC<ReportCardProps> = ({
                 </p>
               </div>
             </div>
+          )}
 
-            {/* Report metadata footer */}
-            <div className="mt-6 border-t border-slate-300 pt-4 text-center text-xs text-slate-500 print:text-xs">
+          <div className="mt-6 border-t border-slate-300 pt-4 text-center text-xs text-slate-500 print:text-xs">
               <p>
                 Report Date: <span className="font-mono">{report.reportDate || new Date().toLocaleDateString()}</span>
               </p>
               <p>Term: {report.term}</p>
               <p className="mt-2 italic">
-                This is an official academic transcript. Tampering or reproduction without authorization is prohibited.
+                This report was generated from academic records stored by the school.
               </p>
-            </div>
-          </footer>
-        )}
+          </div>
+        </footer>
       </div>
     </article>
   );

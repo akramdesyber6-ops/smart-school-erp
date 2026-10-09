@@ -39,67 +39,59 @@ export function normalizeRoles(values: unknown): string[] {
 }
 
 export async function processSecureRedirects(
-  payload: JWTPayload | Record<string, any> | null,
+  payload: JWTPayload | Record<string, unknown> | null,
   context: RouteContext
 ): Promise<string | null | undefined> {
-  // If no payload (unauthenticated), redirect to login for protected routes
+  const { pathname } = context;
+
   if (!payload) {
-    // Allow public routes like /login, /forgot-password, etc.
-    const publicRoutes = ['/login', '/forgot-password', '/signup'];
-    if (publicRoutes.some((route) => context.pathname.startsWith(route))) {
+    const publicRoutes = ['/', '/login', '/forgot-password', '/signup'];
+    if (publicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
       return null;
     }
     return '/login';
   }
 
+  const rawRoles = payload['x-hasura-allowed-roles'];
   const role = typeof payload.role === 'string' ? payload.role.toLowerCase() : null;
-  const roles = normalizeRoles(payload.roles ?? payload['x-hasura-allowed-roles'] ?? payload.role ?? []);
+  const roles = normalizeRoles(payload.roles ?? rawRoles ?? payload.role ?? []);
   const allRoles = new Set([role, ...roles].filter(Boolean) as string[]);
 
-  if (allRoles.has('admin') || allRoles.has('school_admin') || allRoles.has('super_admin')) {
-    const target = '/admin';
-    const isAllowed =
-      context.pathname === '/admin' ||
-      context.pathname.startsWith('/admin/') ||
-      context.pathname === '/school-admin-dashboard' ||
-      context.pathname.startsWith('/school-admin-dashboard/') ||
-      context.pathname.startsWith('/dashboards/school-admin') ||
-      context.pathname.startsWith('/dashboards/admin');
-    if (!isAllowed) return target;
-    return null;
-  }
+  const roleRoutes = [
+    {
+      roles: ['admin', 'school_admin', 'super_admin'],
+      target: '/admin',
+      routes: ['/admin', '/school-admin-dashboard', '/dashboards/school-admin', '/dashboards/admin'],
+    },
+    {
+      roles: ['teacher'],
+      target: '/teacher-dashboard',
+      routes: ['/teacher-dashboard', '/dashboards/teacher', '/dashboard/marks'],
+    },
+    {
+      roles: ['student'],
+      target: '/dashboard',
+      routes: ['/dashboard', '/student-dashboard', '/dashboards/student'],
+    },
+    {
+      roles: ['parent'],
+      target: '/parent-dashboard',
+      routes: ['/parent-dashboard', '/dashboards/parent'],
+    },
+  ];
 
-  if (allRoles.has('teacher')) {
-    const target = '/teacher-dashboard';
-    const isAllowed =
-      context.pathname === '/teacher-dashboard' ||
-      context.pathname.startsWith('/teacher-dashboard/') ||
-      context.pathname.startsWith('/dashboards/teacher');
-    if (!isAllowed) return target;
-    return null;
-  }
+  const dashboardPaths = roleRoutes.flatMap((entry) => entry.routes);
+  const isDashboardPath = dashboardPaths.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const selectedRole = roleRoutes.find((entry) => entry.roles.some((name) => allRoles.has(name)));
+  if (!selectedRole) return isDashboardPath ? '/login' : null;
 
-  if (allRoles.has('student')) {
-    const target = '/dashboard';
-    const isAllowed =
-      context.pathname === '/dashboard' ||
-      context.pathname.startsWith('/dashboard/') ||
-      context.pathname === '/student-dashboard' ||
-      context.pathname.startsWith('/student-dashboard/') ||
-      context.pathname.startsWith('/dashboards/student');
-    if (!isAllowed) return target;
-    return null;
-  }
+  const isMarksEntryPath = pathname === '/dashboard/marks' || pathname.startsWith('/dashboard/marks/');
+  const isOwnDashboardPath =
+    selectedRole.routes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) &&
+    !(isMarksEntryPath && selectedRole.target !== '/teacher-dashboard');
 
-  if (allRoles.has('parent')) {
-    const target = '/parent-dashboard';
-    const isAllowed =
-      context.pathname === '/parent-dashboard' ||
-      context.pathname.startsWith('/parent-dashboard/') ||
-      context.pathname.startsWith('/dashboards/parent');
-    if (!isAllowed) return target;
-    return null;
-  }
+  if (pathname === '/' || pathname === '/login') return selectedRole.target;
+  if (isDashboardPath && !isOwnDashboardPath) return selectedRole.target;
 
   return null;
 }

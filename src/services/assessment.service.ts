@@ -4,7 +4,7 @@
  * Production-grade with full error handling and type safety
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase/client';
 import {
   Student,
   AssessmentType,
@@ -13,17 +13,6 @@ import {
   SubjectAssessment,
 } from '@/types/assessment';
 
-// Initialize Supabase client with safe placeholders so production builds still compile without runtime envs.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
-
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  // eslint-disable-next-line no-console
-  console.warn('Supabase environment variables are not fully configured. Ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set.');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 /**
  * Database schema types for type-safe queries
  */
@@ -31,12 +20,9 @@ export interface StudentRecord {
   id: string;
   first_name: string;
   last_name: string;
-  admission_number: string;
-  class_id: string;
-  stream: 'East' | 'West' | 'North' | 'South';
-  photo_url: string | null;
-  created_at: string;
-  updated_at: string;
+  registration_number: string;
+  stream: string | null;
+  class_name: string;
 }
 
 export interface AssessmentRecord {
@@ -44,6 +30,7 @@ export interface AssessmentRecord {
   student_id: string;
   subject_id: string;
   term_id: string;
+  school_id: string;
   assessment_type: AssessmentType;
   score: GradeScale;
   teacher_initials: string;
@@ -56,8 +43,7 @@ export interface SubjectRecord {
   id: string;
   name: string;
   code: string;
-  aoi_competency_description: string | null;
-  created_at: string;
+  description: string | null;
 }
 
 export interface TermRecord {
@@ -67,14 +53,12 @@ export interface TermRecord {
   start_date: string;
   end_date: string;
   is_active: boolean;
-  created_at: string;
 }
 
 export interface ClassRecord {
   id: string;
   name: string;
   year_group: string;
-  created_at: string;
 }
 
 /**
@@ -136,6 +120,30 @@ export async function saveAssessmentMarks(
         'MISSING_CONTEXT'
       );
     }
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      throw new AssessmentServiceError(
+        `Unable to verify the current user: ${authError.message}`,
+        'AUTHENTICATION_FAILED',
+        authError
+      );
+    }
+    if (!user || input.teacherId !== user.id) {
+      throw new AssessmentServiceError('Only the signed-in teacher can save marks.', 'UNAUTHORIZED');
+    }
+
+    const { data: classData, error: classError } = await supabase
+      .from('classes')
+      .select('school_id')
+      .eq('id', input.classId)
+      .single();
+    if (classError) {
+      throw new AssessmentServiceError(
+        `Unable to load the assigned class: ${classError.message}`,
+        'CLASS_LOOKUP_FAILED',
+        classError
+      );
+    }
 
     // Transform marks to database format
     const recordsToUpsert: Partial<AssessmentRecord>[] = input.marks
@@ -144,10 +152,11 @@ export async function saveAssessmentMarks(
         student_id: mark.studentId,
         subject_id: input.subjectId,
         term_id: input.termId,
+        school_id: classData.school_id,
         assessment_type: input.assessmentType,
         score: mark.score,
         teacher_initials: input.teacherInitials,
-        recorded_by: input.teacherId,
+        recorded_by: user.id,
         updated_at: new Date().toISOString(),
       }));
 
@@ -211,28 +220,42 @@ export async function saveAssessmentMarks(
 export async function getClassStudents(classId: string): Promise<Student[]> {
   try {
     const { data, error } = await supabase
-      .from('students')
-      .select('*')
-      .eq('class_id', classId)
-      .order('stream', { ascending: true })
-      .order('last_name', { ascending: true });
+      .from('classes')
+      .select('school_id')
+      .eq('id', classId)
+      .single();
 
     if (error) {
       throw new AssessmentServiceError(
-        `Failed to fetch class students: ${error.message}`,
-        'FETCH_STUDENTS_FAILED',
+        `Failed to fetch class: ${error.message}`,
+        'FETCH_CLASS_FAILED',
         error
       );
     }
 
-    return (data || []).map((record: StudentRecord) => ({
-      id: record.id,
-      firstName: record.first_name,
-      lastName: record.last_name,
-      stream: record.stream,
+    const { data: roster, error: rosterError } = await supabase
+      .from('enrollments')
+      .select('students!inner(id, first_name, last_name, registration_number), classes!inner(stream)')
+      .eq('class_id', classId)
+      .eq('school_id', data.school_id)
+      .eq('status', 'active')
+      .order('students.last_name', { ascending: true });
+
+    if (rosterError) {
+      throw new AssessmentServiceError(
+        `Failed to fetch class students: ${rosterError.message}`,
+        'FETCH_STUDENTS_FAILED',
+        rosterError
+      );
+    }
+
+    return (roster || []).map((record: any) => ({
+      id: record.students.id,
+      firstName: record.students.first_name,
+      lastName: record.students.last_name,
+      stream: record.classes.stream ?? '',
       class: classId,
-      admissionNumber: record.admission_number,
-      photoUrl: record.photo_url || undefined,
+      admissionNumber: record.students.registration_number,
     }));
   } catch (error) {
     if (error instanceof AssessmentServiceError) {
@@ -327,10 +350,10 @@ export async function getStudentGradeReport(
       );
     }
 
-    // Fetch student profile with class info
+    // Resolve class membership through the term-specific enrollment relationship.
     const { data: studentData, error: studentError } = await supabase
       .from('students')
-      .select('*, classes:class_id(name)')
+      .select('id, school_id, first_name, last_name, registration_number, schools!inner(name, location, email, phone)')
       .eq('id', studentId)
       .single();
 
@@ -347,11 +370,41 @@ export async function getStudentGradeReport(
         studentError
       );
     }
+    const schoolData = Array.isArray(studentData.schools)
+      ? studentData.schools[0]
+      : studentData.schools;
+    if (!schoolData) {
+      throw new AssessmentServiceError(
+        'The student record is not linked to a school profile.',
+        'SCHOOL_NOT_FOUND'
+      );
+    }
+
+    const { data: enrollmentData, error: enrollmentError } = await supabase
+      .from('enrollments')
+      .select('classes!inner(name, stream)')
+      .eq('student_id', studentId)
+      .eq('term_id', termId)
+      .eq('school_id', studentData.school_id)
+      .order('enrollment_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (enrollmentError) {
+      throw new AssessmentServiceError(
+        `Failed to fetch student enrollment: ${enrollmentError.message}`,
+        'FETCH_ENROLLMENT_FAILED',
+        enrollmentError
+      );
+    }
+    const enrollmentClass = Array.isArray(enrollmentData?.classes)
+      ? enrollmentData.classes[0]
+      : enrollmentData?.classes;
 
     // Fetch term info
     const { data: termData, error: termError } = await supabase
-      .from('terms')
-      .select('*')
+      .from('academic_terms')
+      .select('id, school_id, name, academic_years!inner(year)')
       .eq('id', termId)
       .single();
 
@@ -368,24 +421,36 @@ export async function getStudentGradeReport(
         termError
       );
     }
+    if (!termData) {
+      throw new AssessmentServiceError(`Term not found: ${termId}`, 'TERM_NOT_FOUND');
+    }
+    if (termData.school_id !== studentData.school_id) {
+      throw new AssessmentServiceError(
+        'The selected academic term does not belong to the student’s school.',
+        'TERM_SCHOOL_MISMATCH'
+      );
+    }
+    const academicYear = Array.isArray(termData.academic_years)
+      ? termData.academic_years[0]
+      : termData.academic_years;
 
     // Build student object
     const student: Student = {
       id: studentData.id,
       firstName: studentData.first_name,
       lastName: studentData.last_name,
-      stream: studentData.stream,
-      class: (studentData.classes as any)?.name || '',
-      admissionNumber: studentData.admission_number || undefined,
-      photoUrl: studentData.photo_url || undefined,
+      stream: enrollmentClass?.stream ?? '',
+      class: enrollmentClass?.name ?? '',
+      admissionNumber: studentData.registration_number,
     };
 
     // Fetch all assessments for this student in the term
     const { data: assessmentData, error: assessmentError } = await supabase
       .from('student_assessments')
-      .select('*, subjects:subject_id(name, code, aoi_competency_description)')
+      .select('*, subjects!inner(name, code, description)')
       .eq('student_id', studentId)
       .eq('term_id', termId)
+      .eq('school_id', studentData.school_id)
       .order('subject_id', { ascending: true });
 
     if (assessmentError) {
@@ -408,7 +473,7 @@ export async function getStudentGradeReport(
           subjectId,
           subjectName: subjectInfo?.name || 'Unknown Subject',
           teacherInitials: assessment.teacher_initials || '—',
-          aoiKey: subjectInfo?.aoi_competency_description || undefined,
+          aoiKey: subjectInfo?.description || undefined,
         });
       }
 
@@ -441,9 +506,15 @@ export async function getStudentGradeReport(
 
     const report: StudentGradeReport = {
       student,
+      school: {
+        name: schoolData.name,
+        location: schoolData.location,
+        contactEmail: schoolData.email,
+        contactPhone: schoolData.phone,
+      },
       class: student.class,
       term: termData.name,
-      academicYear: termData.year.toString(),
+      academicYear: String(academicYear.year),
       subjects,
       reportDate: new Date().toISOString().split('T')[0],
     };
@@ -466,6 +537,40 @@ export async function getStudentGradeReport(
   }
 }
 
+export async function getCurrentTermForStudent(studentId: string): Promise<string | null> {
+  if (!studentId) {
+    throw new AssessmentServiceError('Missing studentId', 'MISSING_PARAMS');
+  }
+
+  const { data: student, error: studentError } = await supabase
+    .from('students')
+    .select('school_id')
+    .eq('id', studentId)
+    .single();
+  if (studentError) {
+    throw new AssessmentServiceError(
+      `Failed to load student school: ${studentError.message}`,
+      'FETCH_STUDENT_FAILED',
+      studentError
+    );
+  }
+
+  const { data: terms, error: termsError } = await supabase
+    .from('academic_terms')
+    .select('id, is_current, start_date')
+    .eq('school_id', student.school_id)
+    .order('start_date', { ascending: false });
+  if (termsError) {
+    throw new AssessmentServiceError(
+      `Failed to fetch academic terms: ${termsError.message}`,
+      'FETCH_TERMS_FAILED',
+      termsError
+    );
+  }
+
+  return terms?.find((term) => term.is_current)?.id ?? terms?.[0]?.id ?? null;
+}
+
 /**
  * ============================================================
  * REFERENCE DATA SERVICE
@@ -478,10 +583,9 @@ export async function getStudentGradeReport(
 export async function getActiveTerms(): Promise<TermRecord[]> {
   try {
     const { data, error } = await supabase
-      .from('terms')
-      .select('*')
-      .eq('is_active', true)
-      .order('year', { ascending: false })
+      .from('academic_terms')
+      .select('id, name, start_date, end_date, is_current, academic_years!inner(year)')
+      .order('start_date', { ascending: false })
       .order('name', { ascending: true });
 
     if (error) {
@@ -492,7 +596,14 @@ export async function getActiveTerms(): Promise<TermRecord[]> {
       );
     }
 
-    return data || [];
+    return (data || []).map((term: any) => ({
+      id: term.id,
+      name: term.name,
+      year: term.academic_years.year,
+      start_date: term.start_date,
+      end_date: term.end_date,
+      is_active: term.is_current,
+    }));
   } catch (error) {
     if (error instanceof AssessmentServiceError) {
       throw error;
@@ -512,7 +623,7 @@ export async function getSubjects(): Promise<SubjectRecord[]> {
   try {
     const { data, error } = await supabase
       .from('subjects')
-      .select('*')
+      .select('id, name, code, description')
       .order('name', { ascending: true });
 
     if (error) {
@@ -543,8 +654,8 @@ export async function getClasses(): Promise<ClassRecord[]> {
   try {
     const { data, error } = await supabase
       .from('classes')
-      .select('*')
-      .order('year_group', { ascending: true })
+      .select('id, name, form_level')
+      .order('form_level', { ascending: true })
       .order('name', { ascending: true });
 
     if (error) {
@@ -555,7 +666,11 @@ export async function getClasses(): Promise<ClassRecord[]> {
       );
     }
 
-    return data || [];
+    return (data || []).map((classRow: any) => ({
+      id: classRow.id,
+      name: classRow.name,
+      year_group: String(classRow.form_level),
+    }));
   } catch (error) {
     if (error instanceof AssessmentServiceError) {
       throw error;
@@ -589,14 +704,23 @@ export interface VerificationRecord {
  */
 export async function getVerificationToken(
   studentId: string,
+  termId: string,
   reportDate: string
 ): Promise<string | null> {
   try {
+    if (!studentId || !termId || !reportDate) {
+      throw new AssessmentServiceError(
+        'Missing studentId, termId, or reportDate',
+        'MISSING_PARAMS'
+      );
+    }
+
     // Check if verification already exists
     const { data: existingToken, error: checkError } = await supabase
       .from('report_verifications')
       .select('verification_token')
       .eq('student_id', studentId)
+      .eq('term_id', termId)
       .eq('report_date', reportDate)
       .single();
 
@@ -612,13 +736,28 @@ export async function getVerificationToken(
       return existingToken.verification_token;
     }
 
+    const { data: student, error: studentError } = await supabase
+      .from('students')
+      .select('school_id')
+      .eq('id', studentId)
+      .single();
+    if (studentError) {
+      throw new AssessmentServiceError(
+        `Failed to load student school: ${studentError.message}`,
+        'FETCH_STUDENT_FAILED',
+        studentError
+      );
+    }
+
     // Generate new verification token
-    const token = generateVerificationToken(studentId, reportDate);
+    const token = generateVerificationToken();
 
     const { error: insertError } = await supabase
       .from('report_verifications')
       .insert({
         student_id: studentId,
+        term_id: termId,
+        school_id: student.school_id,
         report_date: reportDate,
         verification_token: token,
         is_valid: true,
@@ -656,49 +795,24 @@ export async function verifyReportCard(token: string): Promise<{
   error?: string;
 }> {
   try {
-    const { data, error } = await supabase
-      .from('report_verifications')
-      .select('*')
-      .eq('verification_token', token)
-      .eq('is_valid', true)
-      .single();
+      const { data, error } = await supabase.rpc('verify_report_card', { p_token: token });
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return {
-          isValid: false,
-          error: 'Invalid or expired verification token',
-        };
-      }
-      throw new AssessmentServiceError(
+      if (error) {
+        throw new AssessmentServiceError(
         `Failed to verify report: ${error.message}`,
         'VERIFY_REPORT_FAILED',
         error
       );
     }
 
-    // Update verification record with verification timestamp
-    const { error: updateError } = await supabase
-      .from('report_verifications')
-      .update({
-        verified_at: new Date().toISOString(),
-        verified_by: (await supabase.auth.getUser()).data.user?.id,
-      })
-      .eq('verification_token', token);
-
-    if (updateError) {
-      console.warn(
-        'Failed to update verification timestamp:',
-        updateError.message
-      );
-      // Don't fail the verification if we can't update the timestamp
+    const verification = data?.[0];
+    if (!verification?.is_valid) {
+      return { isValid: false, error: 'Invalid or expired verification token' };
     }
 
     return {
       isValid: true,
-      studentId: data.student_id,
-      reportDate: data.report_date,
-      verifiedAt: data.verified_at,
+      reportDate: verification.report_date,
     };
   } catch (error) {
     if (error instanceof AssessmentServiceError) {
@@ -715,22 +829,10 @@ export async function verifyReportCard(token: string): Promise<{
 /**
  * Generate a cryptographically secure verification token
  */
-function generateVerificationToken(studentId: string, reportDate: string): string {
-  const timestamp = Date.now();
-  const data = `${studentId}|${reportDate}|${timestamp}`;
-
-  // Use Supabase UUID-like format: 8-4-4-4-12 hex segments
-  let hash = 0;
-  for (let i = 0; i < data.length; i++) {
-    const char = data.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-
-  const hex = Math.abs(hash).toString(16).padStart(12, '0');
-  const base64 = Buffer.from(data).toString('base64').slice(0, 16);
-
-  return `${hex}${base64}`.slice(0, 36);
+function generateVerificationToken(): string {
+  const randomBytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(randomBytes);
+  return Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**

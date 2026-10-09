@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/useAuthStore';
 import { supabase, ClassRow } from '@/lib/supabase/api';
+import DashboardAccountActions from '@/components/DashboardAccountActions';
 import { Users, BookOpen, GraduationCap, Plus, X, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 interface SchoolMetrics {
@@ -78,7 +79,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
         return;
       }
 
-      if (profile.role !== 'school_admin' && profile.role !== 'admin') {
+      if (profile.role !== 'school_admin' && profile.role !== 'admin' && profile.role !== 'super_admin') {
         setError('Unauthorized: Only school admins can access this dashboard.');
         setTimeout(() => router.push('/dashboard'), 2000);
         return;
@@ -97,25 +98,25 @@ export default function SchoolAdminDashboard(): JSX.Element {
         if (schoolError) throw schoolError;
 
         // Fetch student count
-        const { data: studentsData, error: studentsError } = await supabase
+        const { count: studentsCount, error: studentsError } = await supabase
           .from('students')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .eq('school_id', activeSchoolId);
 
-        if (studentsError && studentsError.code !== 'PGRST116') throw studentsError;
+        if (studentsError) throw studentsError;
 
         // Fetch teacher count
-        const { data: teachersData, error: teachersError } = await supabase
+        const { count: teachersCount, error: teachersError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .eq('school_id', activeSchoolId)
           .eq('role', 'teacher');
 
-        if (teachersError && teachersError.code !== 'PGRST116') throw teachersError;
+        if (teachersError) throw teachersError;
 
         setMetrics({
-          totalStudents: studentsData?.length || 0,
-          totalTeachers: teachersData?.length || 0,
+          totalStudents: studentsCount ?? 0,
+          totalTeachers: teachersCount ?? 0,
           emisCode: schoolData?.emis_code || null,
           schoolName: schoolData?.name || 'School',
         });
@@ -127,7 +128,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
           .eq('school_id', activeSchoolId)
           .order('name', { ascending: true });
 
-        if (classesError && classesError.code !== 'PGRST116') throw classesError;
+        if (classesError) throw classesError;
         setClasses((classesData as ClassStream[]) || []);
 
         // Fetch academic terms
@@ -137,7 +138,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
           .eq('school_id', activeSchoolId)
           .order('start_date', { ascending: false });
 
-        if (termsError && termsError.code !== 'PGRST116') throw termsError;
+        if (termsError) throw termsError;
         setTerms((termsData as AcademicTerm[]) || []);
 
         // Fetch active enrollments (last 10)
@@ -148,7 +149,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
           .order('created_at', { ascending: false })
           .limit(10);
 
-        if (enrollmentsError && enrollmentsError.code !== 'PGRST116') throw enrollmentsError;
+        if (enrollmentsError) throw enrollmentsError;
         setEnrollments(enrollmentsData || []);
       } catch (err: any) {
         console.error('Dashboard load error:', err);
@@ -231,6 +232,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
             term_id: studentForm.termId,
             school_id: activeSchoolId,
             status: 'active',
+            enrollment_date: new Date().toISOString().slice(0, 10),
           },
         ]);
 
@@ -302,9 +304,12 @@ export default function SchoolAdminDashboard(): JSX.Element {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">{metrics?.schoolName} Admin Dashboard</h1>
-          <p className="text-gray-500 mt-1">EMIS Code: {metrics?.emisCode || 'Not assigned'}</p>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-6 lg:px-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{metrics?.schoolName} Admin Dashboard</h1>
+            <p className="text-gray-500 mt-1">EMIS Code: {metrics?.emisCode || 'Not assigned'}</p>
+          </div>
+          <DashboardAccountActions />
         </div>
       </div>
 

@@ -12,14 +12,20 @@ BEGIN;
 -- 1. ASSESSMENT TYPES & GRADING SCALE TABLES (NEW)
 -- =====================================================================
 
--- Create assessment_types enum if not exists
-CREATE TYPE assessment_type_enum AS ENUM ('AOI1', 'AOI2', 'AOI3', 'EOT');
+DO $$ BEGIN
+  CREATE TYPE public.assessment_type_enum AS ENUM ('AOI1', 'AOI2', 'AOI3', 'EOT');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- Create alpha_grade enum
-CREATE TYPE alpha_grade_enum AS ENUM ('A', 'B', 'C', 'D', 'E');
+DO $$ BEGIN
+  CREATE TYPE public.alpha_grade_enum AS ENUM ('A', 'B', 'C', 'D', 'E');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- Create achievement_level enum
-CREATE TYPE achievement_level_enum AS ENUM ('Excellent', 'Very Good', 'Good', 'Fair', 'Below Average');
+DO $$ BEGIN
+  CREATE TYPE public.achievement_level_enum AS ENUM ('Excellent', 'Very Good', 'Good', 'Fair', 'Below Average');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- 2. STUDENT ASSESSMENTS TABLE (NEW)
@@ -29,14 +35,14 @@ CREATE TYPE achievement_level_enum AS ENUM ('Excellent', 'Very Good', 'Good', 'F
 
 CREATE TABLE IF NOT EXISTS public.student_assessments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id TEXT NOT NULL,
+  student_id UUID NOT NULL,
   subject_id UUID NOT NULL,
   term_id UUID NOT NULL,
   school_id UUID NOT NULL,
   assessment_type assessment_type_enum NOT NULL,
   score NUMERIC(3, 1) CHECK (score >= 0 AND score <= 3), -- 0-3 scale with decimals
   teacher_initials VARCHAR(10),
-  recorded_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  recorded_by UUID NOT NULL REFERENCES auth.users(id),
   comments TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -52,11 +58,11 @@ CREATE TABLE IF NOT EXISTS public.student_assessments (
 );
 
 -- Create indexes for fast queries
-CREATE INDEX idx_assessments_student ON public.student_assessments(student_id);
-CREATE INDEX idx_assessments_subject ON public.student_assessments(subject_id);
-CREATE INDEX idx_assessments_term ON public.student_assessments(term_id);
-CREATE INDEX idx_assessments_school ON public.student_assessments(school_id);
-CREATE INDEX idx_assessments_recorded_by ON public.student_assessments(recorded_by);
+CREATE INDEX IF NOT EXISTS idx_assessments_student ON public.student_assessments(student_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_subject ON public.student_assessments(subject_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_term ON public.student_assessments(term_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_school ON public.student_assessments(school_id);
+CREATE INDEX IF NOT EXISTS idx_assessments_recorded_by ON public.student_assessments(recorded_by);
 
 -- =====================================================================
 -- 3. GRADE MAPPINGS TABLE (NEW)
@@ -76,7 +82,7 @@ CREATE TABLE IF NOT EXISTS public.grade_mappings (
   UNIQUE (school_id, curriculum_type, min_score, max_score)
 );
 
-CREATE INDEX idx_grade_mappings_school ON public.grade_mappings(school_id);
+CREATE INDEX IF NOT EXISTS idx_grade_mappings_school ON public.grade_mappings(school_id);
 
 -- =====================================================================
 -- 4. REPORT VERIFICATIONS TABLE (NEW - Module 3 QR Codes)
@@ -85,7 +91,7 @@ CREATE INDEX idx_grade_mappings_school ON public.grade_mappings(school_id);
 
 CREATE TABLE IF NOT EXISTS public.report_verifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id TEXT NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
   term_id UUID NOT NULL REFERENCES public.academic_terms(id) ON DELETE CASCADE,
   school_id UUID NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
   report_date DATE NOT NULL,
@@ -97,9 +103,9 @@ CREATE TABLE IF NOT EXISTS public.report_verifications (
   UNIQUE (student_id, term_id, report_date)
 );
 
-CREATE INDEX idx_verifications_student ON public.report_verifications(student_id);
-CREATE INDEX idx_verifications_token ON public.report_verifications(verification_token);
-CREATE INDEX idx_verifications_school ON public.report_verifications(school_id);
+CREATE INDEX IF NOT EXISTS idx_verifications_student ON public.report_verifications(student_id);
+CREATE INDEX IF NOT EXISTS idx_verifications_token ON public.report_verifications(verification_token);
+CREATE INDEX IF NOT EXISTS idx_verifications_school ON public.report_verifications(school_id);
 
 -- =====================================================================
 -- 5. ENABLE ROW-LEVEL SECURITY (RLS)
@@ -108,15 +114,17 @@ CREATE INDEX idx_verifications_school ON public.report_verifications(school_id);
 -- Enable RLS on student_assessments
 ALTER TABLE public.student_assessments ENABLE ROW LEVEL SECURITY;
 
--- Policy: Teachers can see assessments for their assigned subjects
+-- This migration's initial policies remain conservative until the role and tenant
+-- policies in the following RLS hardening migration replace them.
 CREATE POLICY "Teachers see own subject assessments"
   ON public.student_assessments
   FOR SELECT
   USING (
-    recorded_by = auth.uid() OR
-    school_id IN (
+    EXISTS (
       SELECT school_id FROM public.profiles 
-      WHERE user_id = auth.uid() AND role IN ('teacher', 'school_admin', 'headteacher')
+      WHERE user_id = auth.uid()
+        AND school_id = student_assessments.school_id
+        AND role IN ('teacher', 'school_admin', 'admin')
     )
   );
 
@@ -124,13 +132,37 @@ CREATE POLICY "Teachers see own subject assessments"
 CREATE POLICY "Teachers manage own records"
   ON public.student_assessments
   FOR INSERT
-  WITH CHECK (recorded_by = auth.uid());
+  WITH CHECK (
+    recorded_by = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE user_id = auth.uid()
+        AND school_id = student_assessments.school_id
+        AND role = 'teacher'
+    )
+  );
 
 CREATE POLICY "Teachers update own records"
   ON public.student_assessments
   FOR UPDATE
-  USING (recorded_by = auth.uid())
-  WITH CHECK (recorded_by = auth.uid());
+  USING (
+    recorded_by = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE user_id = auth.uid()
+        AND school_id = student_assessments.school_id
+        AND role = 'teacher'
+    )
+  )
+  WITH CHECK (
+    recorded_by = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE user_id = auth.uid()
+        AND school_id = student_assessments.school_id
+        AND role = 'teacher'
+    )
+  );
 
 -- Policy: Only admins can delete
 CREATE POLICY "Admins delete assessments"
@@ -139,17 +171,14 @@ CREATE POLICY "Admins delete assessments"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE user_id = auth.uid() AND role = 'school_admin'
+      WHERE user_id = auth.uid()
+        AND school_id = student_assessments.school_id
+        AND role IN ('school_admin', 'admin')
     )
   );
 
 -- Enable RLS on report_verifications
 ALTER TABLE public.report_verifications ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Anyone can verify reports"
-  ON public.report_verifications
-  FOR SELECT
-  USING (is_valid = true);
 
 CREATE POLICY "Admins manage verifications"
   ON public.report_verifications
@@ -157,7 +186,17 @@ CREATE POLICY "Admins manage verifications"
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE user_id = auth.uid() AND role = 'school_admin'
+      WHERE user_id = auth.uid()
+        AND school_id = report_verifications.school_id
+        AND role IN ('school_admin', 'admin')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE user_id = auth.uid()
+        AND school_id = report_verifications.school_id
+        AND role IN ('school_admin', 'admin')
     )
   );
 
@@ -207,7 +246,7 @@ CREATE TABLE IF NOT EXISTS public.student_subject_assignments (
   stream VARCHAR(50) NOT NULL,
   assigned_by VARCHAR(100) DEFAULT 'System',
   assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() ON UPDATE current_timestamp
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create index for fast lookups
@@ -223,7 +262,7 @@ CREATE INDEX idx_student_subject_assignments_subject
 -- Computes average score across AOI1, AOI2, AOI3, EOT for a subject
 
 CREATE OR REPLACE FUNCTION public.calculate_subject_average(
-  p_student_id TEXT,
+  p_student_id UUID,
   p_subject_id UUID,
   p_term_id UUID
 ) RETURNS NUMERIC AS $$
@@ -239,7 +278,7 @@ BEGIN
   
   RETURN COALESCE(v_average, 0);
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql STABLE;
 
 -- =====================================================================
 -- 9. HELPER FUNCTION: Convert Score to Alpha Grade
@@ -263,7 +302,7 @@ BEGIN
   
   RETURN COALESCE(v_grade, 'E'::alpha_grade_enum);
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql STABLE;
 
 -- =====================================================================
 -- 10. HELPER FUNCTION: Convert Score to /20 Scale
@@ -297,6 +336,12 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS update_assessment_timestamp ON public.student_assessments;
 CREATE TRIGGER update_assessment_timestamp
   BEFORE UPDATE ON public.student_assessments
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
+
+DROP TRIGGER IF EXISTS update_student_subject_assignment_timestamp ON public.student_subject_assignments;
+CREATE TRIGGER update_student_subject_assignment_timestamp
+  BEFORE UPDATE ON public.student_subject_assignments
   FOR EACH ROW
   EXECUTE FUNCTION public.update_timestamp();
 

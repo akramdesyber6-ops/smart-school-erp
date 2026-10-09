@@ -2,31 +2,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import useAuthStore from '@/lib/stores/useAuthStore';
 import { processSecureRedirects } from '@/lib/routes/routing_security';
-
-// Ensure you have NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY set in your environment.
-const NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-if (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  // We do not throw here since this file might be statically analyzed. Instead, we will guard at runtime.
-}
-
-function getSupabaseClient(): SupabaseClient {
-  return createClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    auth: { persistSession: true }
-  });
-}
-
-type AuthError = {
-  message: string;
-};
+import { supabase } from '@/lib/supabase/client';
 
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
-  const setSession = useAuthStore((s: any) => s.setSession);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,11 +19,9 @@ export default function LoginPage(): JSX.Element {
     setError(null);
     setLoading(true);
     try {
-      if (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
         throw new Error('Supabase client not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
       }
-
-      const supabase = getSupabaseClient();
 
       const {
         data: signInData,
@@ -67,7 +46,7 @@ export default function LoginPage(): JSX.Element {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', session.user.id)
+        .eq('user_id', session.user.id)
         .single();
 
       if (profileError) {
@@ -77,27 +56,26 @@ export default function LoginPage(): JSX.Element {
         return;
       }
 
+      if (!profile || profile.is_active !== true) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          throw new Error(`This school account is inactive and could not be signed out: ${signOutError.message}`);
+        }
+        setError('This school account is inactive. Contact your school administrator.');
+        setLoading(false);
+        return;
+      }
+
       // Persist session and profile to the Zustand store
       useAuthStore.getState().setSession({ session, profile });
 
-      // Execute routing logic using processSecureRedirects
-      try {
-        const redirectPath = await processSecureRedirects(
-          { role: profile?.role, roles: profile?.roles },
-          { pathname: '/' }
-        );
-        if (redirectPath) {
-          router.push(redirectPath);
-          return;
-        }
-      } catch (e) {
-        // ignore and use default
-      }
-
-      // Default fallback
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err?.message ?? 'Unknown authentication error');
+      const redirectPath = await processSecureRedirects(
+        { role: profile.role, roles: profile.roles },
+        { pathname: '/' }
+      );
+      router.replace(redirectPath ?? '/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown authentication error');
     } finally {
       setLoading(false);
     }

@@ -87,6 +87,9 @@ export function useStudentGradeReport(
   useEffect(() => {
     if (enabled) {
       fetchReport();
+    } else {
+      setLoading(false);
+      setReport(null);
     }
   }, [options.studentId, options.termId, enabled, fetchReport]);
 
