@@ -73,7 +73,9 @@ the checked-in App Router.
   client will now be rejected and must be moved server-side.
 - The markbook audit trigger and protected-profile trigger have only been statically
   reviewed here; test their behavior for authenticated users, school admins, and the
-  service role in a disposable Supabase instance before deployment.
+  service role in a disposable Supabase instance before deployment. The triggers
+  explicitly allow the trusted `postgres`/`supabase_admin` database roles so the
+  repository's SQL seed/migration workflow can still provision fixtures.
 - No test script or dependency lockfile is present in the repository root.
   Static review does not verify deployed PostgreSQL grants/policies, storage
   permissions, environment secrets, or cross-tenant behaviour against a live
