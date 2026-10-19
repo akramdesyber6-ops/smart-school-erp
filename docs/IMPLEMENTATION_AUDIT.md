@@ -27,7 +27,8 @@ the checked-in App Router.
 ## Fixes in this branch
 
 - Removed the developer sandbox UI that referenced undeclared test-account/state
-  symbols and would put account credentials into the public client bundle.
+  symbols and advertised a public test-credential panel; the referenced account data
+  was not defined in the committed source.
 - Removed the nonfunctional footer links and changed the landing-page CTA to an
   existing section. The dashboard mock is labelled as an illustration rather than
   a live school record.
