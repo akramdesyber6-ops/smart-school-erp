@@ -22,8 +22,8 @@ export function getDashboardPathForRole(role: unknown): string {
   if (role === 'admin' || role === 'school_admin') return '/dashboards/school-admin';
   if (role === 'teacher') return '/dashboards/teacher';
 
-  // Student and parent portals are not implemented yet. Keep them on the public
-  // landing page instead of navigating them to a route that does not exist.
+  // Student and parent portals are not implemented yet. Callers must handle
+  // this unsupported role explicitly rather than redirecting to a missing route.
   return '/';
 }
 

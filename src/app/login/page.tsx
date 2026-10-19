@@ -69,22 +69,25 @@ export default function LoginPage(): JSX.Element {
       // Persist session and profile to the Zustand store
       useAuthStore.getState().setSession({ session, profile });
 
-      // Execute routing logic using processSecureRedirects
-      try {
-        const redirectPath = await processSecureRedirects(
-          { role: profile?.role, roles: profile?.roles },
-          { pathname: '/' }
-        );
-        if (redirectPath) {
-          router.push(redirectPath);
-          return;
-        }
-      } catch (e) {
-        // ignore and use default
+      // Redirect only to a dashboard that exists in the current role model.
+      const redirectPath = await processSecureRedirects(
+        { role: profile.role, roles: profile.roles },
+        { pathname: '/' }
+      );
+
+      if (redirectPath) {
+        router.replace(redirectPath);
+        return;
       }
 
-      // Default fallback
-      router.push('/dashboard');
+      // Student and parent records are not yet linked to auth profiles, and their
+      // dashboards are not implemented. End the session rather than sending them
+      // to a nonexistent /dashboard route or leaving them in a misleading state.
+      await supabase.auth.signOut();
+      useAuthStore.getState().clearSession();
+      setError(
+        `Your account (${profile.role}) does not have an available portal in this version. Please contact your school administrator.`
+      );
     } catch (err: any) {
       setError(err?.message ?? 'Unknown authentication error');
     } finally {
