@@ -8,7 +8,7 @@ language plpgsql
 set search_path = public, auth
 as $$
 begin
-  if auth.role() = 'service_role' then
+  if auth.role() = 'service_role' or current_user in ('postgres', 'supabase_admin') then
     return new;
   end if;
 
