@@ -40,6 +40,13 @@ the checked-in App Router.
   than left in a broken authenticated state.
 - Added a versioned migration to prevent ordinary same-school users from reading
   all parent contact rows and student-parent relationship links.
+- Added the `teacher_id` and `marked_at` markbook columns expected by the teacher
+  dashboard, with a database trigger that derives audit attribution from the active
+  authenticated profile instead of trusting client payloads.
+- Added a database trigger that rejects direct client inserts of profile rows and
+  blocks client changes to `user_id`, `school_id`, `role`, and `is_active`;
+  trusted provisioning/administrative workflows must use server-side service-role
+  access.
 
 ## Static security findings and remaining gaps
 
@@ -58,8 +65,15 @@ the checked-in App Router.
 - Student/parent auth identities are not linked to the `students` or `parents`
   rows. Student and parent dashboards and entitled self-service reads cannot be
   implemented safely until the schema includes a verified relationship from the
-  authenticated profile to the corresponding student/parent record. The new
-  migration fails closed for parent contact data in the meantime.
+  authenticated profile to the corresponding student/parent record. The migration
+  fails closed for parent contact data in the meantime.
+- Profile provisioning and changes to profile identity/tenant/role/activation
+  fields must be performed through trusted server workflows. Any existing
+  application workflow that writes these fields directly from an authenticated
+  client will now be rejected and must be moved server-side.
+- The markbook audit trigger and protected-profile trigger have only been statically
+  reviewed here; test their behavior for authenticated users, school admins, and the
+  service role in a disposable Supabase instance before deployment.
 - No test script or dependency lockfile is present in the repository root.
   Static review does not verify deployed PostgreSQL grants/policies, storage
   permissions, environment secrets, or cross-tenant behaviour against a live
