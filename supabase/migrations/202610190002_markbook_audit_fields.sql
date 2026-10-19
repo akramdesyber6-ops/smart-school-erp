@@ -16,7 +16,7 @@ declare
 begin
   -- Trusted server workflows may preserve an explicitly supplied actor for
   -- backfills/imports. Normal authenticated clients cannot spoof these fields.
-  if auth.role() = 'service_role' then
+  if auth.role() = 'service_role' or current_user in ('postgres', 'supabase_admin') then
     new.marked_at := coalesce(new.marked_at, timezone('utc', now()));
     return new;
   end if;
