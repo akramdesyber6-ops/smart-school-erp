@@ -53,6 +53,15 @@ the checked-in App Router.
   blocks client changes to `user_id`, `school_id`, `role`, and `is_active`;
   trusted provisioning/administrative workflows must use server-side service-role
   access.
+- Added a student/parent identity-link migration and role-scoped read policies;
+  student and parent dashboards read actual linked records only.
+- Added a school-admin workflow to link existing student/parent profiles and to
+  create a parent contact plus its student relationship atomically through a
+  school-admin-checked database function.
+- Corrected NCDC total calculation: score inputs are already contribution points
+  with maxima 10/20/70, so the final score is their sum rather than applying those
+  weights a second time. Blank components remain null, and a legitimate zero total
+  is preserved.
 
 ## Static security findings and remaining gaps
 
@@ -78,9 +87,10 @@ the checked-in App Router.
   administrator links them. Student and parent dashboards show an explicit setup
   state instead of fabricated records when there is no verified link.
 - The school-admin account-linking page can associate existing student/parent
-  profiles with records. Creation of Supabase Auth users and trusted profiles is
-  deliberately not done from the browser; use the trusted provisioning workflow
-  first.
+  profiles with records and create parent contacts linked to a student. Creation of
+  Supabase Auth users and trusted profiles is deliberately not done from the
+  browser; use the trusted provisioning workflow first. A school must still run the
+  migrations before the new portal links and RPC function are available.
 - Profile provisioning and changes to profile identity/tenant/role/activation
   fields must be performed through trusted server workflows. Any existing
   application workflow that writes these fields directly from an authenticated
