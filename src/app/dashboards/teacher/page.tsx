@@ -154,7 +154,7 @@ export default function TeacherDashboard(): JSX.Element {
 
       if (profile.role !== 'teacher' && profile.role !== 'admin') {
         setError('Unauthorized: Only teachers can access this dashboard.');
-        setTimeout(() => router.push('/dashboard'), 2000);
+        setTimeout(() => router.replace('/'), 2000);
         return;
       }
 
