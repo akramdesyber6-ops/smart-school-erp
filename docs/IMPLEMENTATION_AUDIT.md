@@ -119,6 +119,9 @@ separate `super_admin` or `bursar` role.
 - The repository does not currently commit a package-manager lockfile. CI installs
   dependencies with pnpm without frozen-lockfile enforcement, so dependency
   reproducibility should be improved by committing the intended lockfile.
+- Added `supabase/config.toml` so Supabase CLI workflows have a checked-in local
+  project configuration and a documented seed path. CLI/database commands still
+  require manual verification and a correctly linked disposable project.
 - Static review and CI do not verify deployed PostgreSQL grants/policies, storage
   permissions, environment secrets, invitation email delivery, or cross-tenant
   behavior against a live Supabase project.
