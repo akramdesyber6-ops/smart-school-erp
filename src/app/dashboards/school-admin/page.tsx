@@ -25,6 +25,7 @@ interface ClassStream {
   id: string;
   name: string;
   stream: string | null;
+  curriculum: 'CBC' | 'NCDC';
   school_id: string;
 }
 
@@ -87,26 +88,26 @@ export default function SchoolAdminDashboard(): JSX.Element {
 
         if (schoolError) throw schoolError;
 
-        // Fetch student count
-        const { data: studentsData, error: studentsError } = await supabase
+        // Use count queries so school metrics are not capped by the API page size.
+        const { count: studentsCount, error: studentsError } = await supabase
           .from('students')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .eq('school_id', activeSchoolId);
 
-        if (studentsError && studentsError.code !== 'PGRST116') throw studentsError;
+        if (studentsError) throw studentsError;
 
-        // Fetch teacher count
-        const { data: teachersData, error: teachersError } = await supabase
+        const { count: teachersCount, error: teachersError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .eq('school_id', activeSchoolId)
-          .eq('role', 'teacher');
+          .eq('role', 'teacher')
+          .eq('is_active', true);
 
-        if (teachersError && teachersError.code !== 'PGRST116') throw teachersError;
+        if (teachersError) throw teachersError;
 
         setMetrics({
-          totalStudents: studentsData?.length || 0,
-          totalTeachers: teachersData?.length || 0,
+          totalStudents: studentsCount ?? 0,
+          totalTeachers: teachersCount ?? 0,
           emisCode: schoolData?.emis_code || null,
           schoolName: schoolData?.name || 'School',
         });
@@ -114,7 +115,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
         // Fetch classes and streams
         const { data: classesData, error: classesError } = await supabase
           .from('classes')
-          .select('id, name, stream, school_id')
+          .select('id, name, stream, curriculum, school_id')
           .eq('school_id', activeSchoolId)
           .order('name', { ascending: true });
 
@@ -403,7 +404,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
                     <tr key={cls.id} className="border-t hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm text-gray-900">{cls.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{cls.stream || '—'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">CBC</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{cls.curriculum}</td>
                     </tr>
                   ))}
                 </tbody>
