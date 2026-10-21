@@ -53,6 +53,8 @@ export default function AccountLinkingPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [creatingParent, setCreatingParent] = useState(false);
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: '', first_name: '', last_name: '', role: 'student' as 'student' | 'parent' });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -185,6 +187,29 @@ export default function AccountLinkingPage(): JSX.Element {
     }
   };
 
+  const invitePortalAccount = async () => {
+    setCreatingInvite(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch('/api/admin/portal-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inviteForm),
+      });
+      const result = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(result.error || 'The portal invitation could not be sent.');
+
+      setNotice(result.message || 'Portal invitation sent.');
+      setInviteForm({ email: '', first_name: '', last_name: '', role: 'student' });
+      await loadData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'The portal invitation could not be sent.');
+    } finally {
+      setCreatingInvite(false);
+    }
+  };
+
   const createParentAndLinkStudent = async () => {
     if (!schoolId || !newParent.studentId) {
       setError('Choose a student before creating the parent contact.');
@@ -244,6 +269,20 @@ export default function AccountLinkingPage(): JSX.Element {
         </div>
         {error && <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0" /><div className="flex-1">{error}</div><button type="button" onClick={() => setRetryKey((key) => key + 1)} className="inline-flex items-center gap-1 font-semibold underline"><RefreshCw className="h-4 w-4" /> Refresh</button></div>}
         {notice && <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle className="mt-0.5 h-5 w-5 shrink-0" />{notice}</div>}
+
+        <section className="rounded-2xl border bg-white shadow-sm" aria-labelledby="invite-portal-heading">
+          <div className="border-b px-5 py-4 sm:px-6">
+            <h2 id="invite-portal-heading" className="text-lg font-semibold text-slate-900">Invite a student or parent to sign in</h2>
+            <p className="mt-1 text-sm text-slate-600">The server creates the Auth invitation and school-scoped profile. After sending it, link the new profile to the matching school record below.</p>
+          </div>
+          <form className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6" onSubmit={(event) => { event.preventDefault(); void invitePortalAccount(); }}>
+            <div><label htmlFor="portal-first-name" className="mb-1 block text-sm font-medium text-slate-700">First name</label><input id="portal-first-name" autoComplete="given-name" required maxLength={100} value={inviteForm.first_name} onChange={(event) => setInviteForm((current) => ({ ...current, first_name: event.target.value }))} className={inputClass} /></div>
+            <div><label htmlFor="portal-last-name" className="mb-1 block text-sm font-medium text-slate-700">Last name</label><input id="portal-last-name" autoComplete="family-name" required maxLength={100} value={inviteForm.last_name} onChange={(event) => setInviteForm((current) => ({ ...current, last_name: event.target.value }))} className={inputClass} /></div>
+            <div><label htmlFor="portal-email" className="mb-1 block text-sm font-medium text-slate-700">Email address</label><input id="portal-email" type="email" autoComplete="email" required maxLength={254} value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} className={inputClass} /></div>
+            <div><label htmlFor="portal-role" className="mb-1 block text-sm font-medium text-slate-700">Portal role</label><select id="portal-role" value={inviteForm.role} onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value as 'student' | 'parent' }))} className={inputClass}><option value="student">Student</option><option value="parent">Parent</option></select></div>
+            <div className="sm:col-span-2"><button type="submit" disabled={creatingInvite} className={buttonClass}>{creatingInvite ? 'Sending invitation…' : 'Send portal invitation'}</button><p className="mt-2 text-xs text-slate-500">Requires the server-only Supabase service-role key and a configured Auth email provider. Never use a service-role key in the browser.</p></div>
+          </form>
+        </section>
 
         <section className="rounded-2xl border bg-white shadow-sm" aria-labelledby="student-links-heading">
           <div className="flex items-center justify-between border-b px-5 py-4 sm:px-6">
