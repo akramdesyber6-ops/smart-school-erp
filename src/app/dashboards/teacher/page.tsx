@@ -245,7 +245,15 @@ export default function TeacherDashboard(): JSX.Element {
           .order('students.first_name', { ascending: true });
 
         if (enrollmentsError && enrollmentsError.code !== 'PGRST116') throw enrollmentsError;
-        setEnrollments((enrollmentsData || []) as StudentEnrollment[]);
+        const enrollmentRows = (enrollmentsData ?? []) as unknown as Array<
+          Omit<StudentEnrollment, 'students'> & {
+            students?: StudentEnrollment['students'] | NonNullable<StudentEnrollment['students']>[];
+          }
+        >;
+        setEnrollments(enrollmentRows.map((row): StudentEnrollment => ({
+          ...row,
+          students: Array.isArray(row.students) ? row.students[0] : row.students,
+        })));
 
         // Load existing markbook entries for this class/subject/term combination
         const { data: markbookData, error: markbookError } = await supabase
@@ -371,25 +379,34 @@ export default function TeacherDashboard(): JSX.Element {
   };
 
   // Handle CBC competency score change
+  const createEditableMark = (studentId: string): MarkbookEntry => ({
+    ...(markbookData.get(studentId) ?? {}),
+    student_id: studentId,
+    class_id: selectedAssignment?.classId ?? '',
+    subject_id: selectedAssignment?.subjectId ?? '',
+    term_id: currentTerm?.id ?? '',
+    school_id: activeSchoolId ?? '',
+  });
+
   const handleCbcScoreChange = (studentId: string, score: number | null) => {
-    const entry = { ...(markbookData.get(studentId) || { student_id: studentId }), competency_score: score };
-    setMarkbookData(new Map(markbookData).set(studentId, entry as MarkbookEntry));
-    void saveMarkbookEntry(studentId, entry as MarkbookEntry);
+    const entry: MarkbookEntry = { ...createEditableMark(studentId), competency_score: score };
+    setMarkbookData(new Map(markbookData).set(studentId, entry));
+    void saveMarkbookEntry(studentId, entry);
   };
 
   // Keep CBC text editing local while typing and persist when the field loses focus.
   const handleCbcObservationChange = (studentId: string, observation: string) => {
-    const entry = { ...(markbookData.get(studentId) || { student_id: studentId }), observation };
-    setMarkbookData(new Map(markbookData).set(studentId, entry as MarkbookEntry));
+    const entry: MarkbookEntry = { ...createEditableMark(studentId), observation };
+    setMarkbookData(new Map(markbookData).set(studentId, entry));
   };
 
   // Handle NCDC score change
   const handleNcdcScoreChange = (studentId: string, field: 'bot' | 'mot' | 'eot', value: number | null) => {
-    const entry = { ...(markbookData.get(studentId) || { student_id: studentId }) };
+    const entry: MarkbookEntry = { ...createEditableMark(studentId) };
     if (field === 'bot') entry.bot_score = value;
     if (field === 'mot') entry.mot_score = value;
     if (field === 'eot') entry.eot_score = value;
-    setMarkbookData(new Map(markbookData).set(studentId, entry as MarkbookEntry));
+    setMarkbookData(new Map(markbookData).set(studentId, entry));
   };
 
   // Save NCDC scores
