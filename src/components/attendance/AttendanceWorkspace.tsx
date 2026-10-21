@@ -16,7 +16,6 @@ type StudentOption = {
 };
 type EnrollmentOption = { student_id: string; students: StudentOption | StudentOption[] | null };
 type AttendanceStatus = '' | 'present' | 'absent' | 'late' | 'excused';
-type ExistingAttendance = { student_id: string; status: Exclude<AttendanceStatus, ''> };
 
 const statusOptions: Array<{ value: AttendanceStatus; label: string }> = [
   { value: '', label: 'Not marked' },
