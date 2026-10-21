@@ -43,6 +43,7 @@ type AttendanceRecord = {
 export default function StudentDashboard(): JSX.Element {
   const router = useRouter();
   const setSession = useAuthStore((state) => state.setSession);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const [student, setStudent] = useState<StudentRecord | null>(null);
   const [enrollments, setEnrollments] = useState<EnrollmentRecord[]>([]);
   const [marks, setMarks] = useState<MarkRecord[]>([]);
@@ -144,6 +145,16 @@ export default function StudentDashboard(): JSX.Element {
     void loadPortal();
   }, [loadPortal]);
 
+  const handleSignOut = async () => {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) {
+      setError('Sign-out failed. Please try again.');
+      return;
+    }
+    clearSession();
+    router.replace('/login');
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -189,7 +200,7 @@ export default function StudentDashboard(): JSX.Element {
             <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">Welcome, {student.first_name} {student.last_name}</h1>
             <p className="mt-1 text-slate-600">Registration number: {student.registration_number}</p>
           </div>
-          <button type="button" onClick={() => router.replace('/login')} className="self-start rounded-lg border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">Sign-in screen</button>
+          <button type="button" onClick={() => void handleSignOut()} className="self-start rounded-lg border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">Sign out</button>
         </div>
       </header>
 
