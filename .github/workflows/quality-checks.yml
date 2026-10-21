@@ -50,3 +50,39 @@ jobs:
 
       - name: Production build
         run: pnpm build
+
+
+  database:
+    name: Supabase migration and policy smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.4
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Start disposable Supabase stack
+        run: pnpm exec supabase start
+
+      - name: Apply migrations and seed locally
+        run: pnpm exec supabase db reset --local
+
+      - name: Lint database schema and functions
+        run: pnpm exec supabase db lint --local --fail-on error
+
+      - name: Test RLS/policy object coverage
+        run: pnpm exec supabase test db --local
+
+      - name: Stop disposable Supabase stack
+        if: always()
+        run: pnpm exec supabase stop --no-backup
