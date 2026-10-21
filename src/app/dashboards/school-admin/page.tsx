@@ -385,7 +385,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
             Link Student / Parent Accounts
           </a>
           <button
-            onClick={() => setModalOpen('create-stream')
+            onClick={() => setModalOpen('create-stream')}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
           >
             <Plus className="h-5 w-5" />
