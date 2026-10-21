@@ -11,10 +11,13 @@ The checked-in App Router has these page routes:
 - `/`: public marketing/entry page.
 - `/login`: Supabase password login and profile lookup.
 - `/dashboards/school-admin`: school administration dashboard with student onboarding, classes/streams, and school metrics.
-- `/dashboards/school-admin/accounts`: school-admin-only linking of existing student and parent profiles to their matching school records.
-- `/dashboards/teacher`: assignment-scoped markbook and lesson-plan template.
+- `/dashboards/school-admin/accounts`: school-admin workflow to invite student/parent users, link existing profiles to records, and manage parent-to-student relationships.
+- `/dashboards/school-admin/attendance`: school-admin attendance register.
+- `/dashboards/teacher`: assignment-scoped markbook, lesson-plan template, and attendance navigation.
+- `/dashboards/teacher/attendance`: teacher attendance register restricted to assigned classes.
 - `/dashboards/student`: authenticated student view of that student's enrollments, assessment entries, and attendance.
 - `/dashboards/parent`: authenticated parent view of linked students' enrollments, assessment entries, and attendance.
+- `/api/admin/portal-accounts`: server-side invitation endpoint for school-admin-created student/parent Auth accounts, requiring server-only Supabase credentials.
 
 The profile schema and route helper define `admin`, `school_admin`, `teacher`,
 `student`, and `parent`. The current role model does not define `bursar` or a
@@ -23,9 +26,9 @@ the routes and tables found in the current tree.
 
 The schema contains 13 core tables for schools, profiles, academic years/terms,
 classes, subjects, students, parents, class-subject assignments, student-parent
-links, enrollments, marks, and attendance. There are no fee/payment tables or
-dedicated attendance, report-card, bursar, student, or parent dashboard pages in
-the checked-in App Router.
+links, enrollments, marks, and attendance. There are still no fee/payment tables,
+dedicated report-card workflow, or bursar dashboard, and the role model has no
+separate `super_admin` or `bursar` role.
 
 ## Fixes in this branch
 
@@ -76,33 +79,40 @@ the checked-in App Router.
   RLS and defines policies for those tables. The teacher-assignment migration
   tightens reads for students, enrollments, attendance, and markbook rows and
   scopes teacher mark writes to assigned class/subject pairs.
-- The current attendance policies permit teacher reads for assigned classes, but
-  the generic attendance write policy is administrator-only. Teacher attendance
-  write flows therefore are not currently supported by these policies.
-- The new student/parent pages and account-linking page have only had static source
-  checks here. Verify the migration against a disposable database, confirm the
-  expected PostgREST relation names, and test same-school and cross-school accounts.
+- A new policy migration permits teachers to insert/update attendance only for
+  same-school assigned classes and enrolled students, while a database trigger
+  derives `marked_by` from the authenticated active profile. These changes require
+  SQL execution and cross-school tests before being treated as verified.
+- The student/parent pages, invitation endpoint, account-linking page, and
+  attendance workspace have only had source/CI checks; no interactive browser or
+  live database test has been performed here. Verify the migrations on a disposable
+  database, confirm PostgREST join names, and test same-school and cross-school
+  accounts.
 - A new migration adds optional `profile_id` foreign keys on student and parent
   records, validates that links point to active profiles of the matching role in
   the same school, and adds self/parent read rules for linked enrollments, marks,
   attendance, and relationship rows. Existing records remain unlinked until an
   administrator links them. Student and parent dashboards show an explicit setup
   state instead of fabricated records when there is no verified link.
-- The school-admin account-linking page can associate existing student/parent
-  profiles with records and create parent contacts linked to a student. Creation of
-  Supabase Auth users and trusted profiles is deliberately not done from the
-  browser; use the trusted provisioning workflow first. A school must still run the
-  migrations before the new portal links and RPC function are available.
+- The school-admin account page can associate existing student/parent profiles,
+  invite new student/parent accounts through a server-side route, and create parent
+  contacts linked to a student. Auth invitations use `createAdminClient()`, which
+  is marked `server-only` and reads `SUPABASE_SERVICE_ROLE_KEY`; the route validates
+  the actor's active school-admin profile before doing privileged work. Configure
+  the service-role key, application URL, and Supabase Auth email provider privately
+  in the deployment. A school must apply the migrations before portal links and RPC
+  functions are available.
 - Profile provisioning and changes to profile identity/tenant/role/activation
   fields must be performed through trusted server workflows. Any existing
   application workflow that writes these fields directly from an authenticated
   client will now be rejected and must be moved server-side.
-- The markbook audit trigger, protected-profile trigger, and student/parent identity
-  link constraints have only been statically
-  reviewed here; test their behavior for authenticated users, school admins, and the
-  service role in a disposable Supabase instance before deployment. The triggers
-  explicitly allow the trusted `postgres`/`supabase_admin` database roles so the
-  repository's SQL seed/migration workflow can still provision fixtures.
+- The markbook audit trigger, protected-profile trigger, student/parent identity
+  links, class/subject assignment checks, attendance-write policies, actor attribution,
+  and atomic student onboarding have only been statically reviewed. Test them for
+  authenticated users, school admins, assigned/unassigned teachers, and the service
+  role in a disposable Supabase instance before deployment. The audit/identity
+  triggers explicitly allow trusted `postgres`/`supabase_admin` database roles
+  for migration/seed workflows.
 - No test script or dependency lockfile is present in the repository root.
   Static review does not verify deployed PostgreSQL grants/policies, storage
   permissions, environment secrets, or cross-tenant behaviour against a live
@@ -110,8 +120,9 @@ the checked-in App Router.
 
 ## Checks still required in a development environment
 
-Run the package scripts after installing dependencies with the project's intended
-package manager:
+The branch now includes a GitHub Actions workflow that runs these checks. Review its
+latest result before merging. Locally, run these package scripts after installing
+dependencies with pnpm:
 
 ```sh
 pnpm type-check
@@ -121,7 +132,7 @@ pnpm build
 
 No automated test script is currently defined in `package.json`. Apply migrations
 to a disposable local Supabase instance and use two test schools with distinct
-teacher/admin accounts to verify that users cannot read or mutate the other
-school's rows. Also verify that non-admin users receive no rows from
+teacher/admin, assigned/unassigned teacher, student, and parent accounts to verify
+that users cannot read or mutate another school's rows. Also verify that non-admin users receive no rows from
 `parents` and `student_parents`, while same-school admins can manage them. Do not
 run reset/destructive test commands against production.
