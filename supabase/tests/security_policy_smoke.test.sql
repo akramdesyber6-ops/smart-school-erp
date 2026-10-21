@@ -87,7 +87,13 @@ select ok(
 );
 
 select ok(
-  exists (select 1 from pg_trigger where tgname = 'profiles_guard_identity_fields' and not tgisinternal)
+  exists (
+    select 1 from pg_trigger
+    where tgname = 'profiles_guard_identity_fields'
+      and not tgisinternal
+      and (tgtype & 4) = 4
+      and (tgtype & 16) = 16
+  )
   and exists (select 1 from pg_trigger where tgname = 'markbook_actor_audit_fields' and not tgisinternal)
   and exists (select 1 from pg_trigger where tgname = 'attendance_actor_audit_fields' and not tgisinternal)
   and exists (select 1 from pg_trigger where tgname = 'class_subjects_validate_assignment' and not tgisinternal)
