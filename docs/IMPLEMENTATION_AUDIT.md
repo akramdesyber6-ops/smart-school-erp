@@ -10,8 +10,11 @@ The checked-in App Router has these page routes:
 
 - `/`: public marketing/entry page.
 - `/login`: Supabase password login and profile lookup.
-- `/dashboards/school-admin`: school administration dashboard with some student onboarding and school metrics.
+- `/dashboards/school-admin`: school administration dashboard with student onboarding, classes/streams, and school metrics.
+- `/dashboards/school-admin/accounts`: school-admin-only linking of existing student and parent profiles to their matching school records.
 - `/dashboards/teacher`: assignment-scoped markbook and lesson-plan template.
+- `/dashboards/student`: authenticated student view of that student's enrollments, assessment entries, and attendance.
+- `/dashboards/parent`: authenticated parent view of linked students' enrollments, assessment entries, and attendance.
 
 The profile schema and route helper define `admin`, `school_admin`, `teacher`,
 `student`, and `parent`. The current role model does not define `bursar` or a
@@ -35,6 +38,9 @@ the checked-in App Router.
 - Fixed the enrollment roster helper: class IDs now filter by `class_id`; stream
   names filter through the related `classes.stream` relation. The previous path
   issued an invalid null filter and then attempted an empty ID list.
+- Fixed teacher mark writes so trusted assignment/tenant identifiers cannot be
+  overwritten by spreading client state after them; repaired duplicate class-only
+  selector values and CBC/NCDC empty-score handling.
 - Removed the login fallback to nonexistent `/dashboard`. Roles without an
   implemented dashboard now receive an explicit message and are signed out rather
   than left in a broken authenticated state.
@@ -62,16 +68,25 @@ the checked-in App Router.
 - The current attendance policies permit teacher reads for assigned classes, but
   the generic attendance write policy is administrator-only. Teacher attendance
   write flows therefore are not currently supported by these policies.
-- Student/parent auth identities are not linked to the `students` or `parents`
-  rows. Student and parent dashboards and entitled self-service reads cannot be
-  implemented safely until the schema includes a verified relationship from the
-  authenticated profile to the corresponding student/parent record. The migration
-  fails closed for parent contact data in the meantime.
+- The new student/parent pages and account-linking page have only had static source
+  checks here. Verify the migration against a disposable database, confirm the
+  expected PostgREST relation names, and test same-school and cross-school accounts.
+- A new migration adds optional `profile_id` foreign keys on student and parent
+  records, validates that links point to active profiles of the matching role in
+  the same school, and adds self/parent read rules for linked enrollments, marks,
+  attendance, and relationship rows. Existing records remain unlinked until an
+  administrator links them. Student and parent dashboards show an explicit setup
+  state instead of fabricated records when there is no verified link.
+- The school-admin account-linking page can associate existing student/parent
+  profiles with records. Creation of Supabase Auth users and trusted profiles is
+  deliberately not done from the browser; use the trusted provisioning workflow
+  first.
 - Profile provisioning and changes to profile identity/tenant/role/activation
   fields must be performed through trusted server workflows. Any existing
   application workflow that writes these fields directly from an authenticated
   client will now be rejected and must be moved server-side.
-- The markbook audit trigger and protected-profile trigger have only been statically
+- The markbook audit trigger, protected-profile trigger, and student/parent identity
+  link constraints have only been statically
   reviewed here; test their behavior for authenticated users, school admins, and the
   service role in a disposable Supabase instance before deployment. The triggers
   explicitly allow the trusted `postgres`/`supabase_admin` database roles so the
