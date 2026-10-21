@@ -196,36 +196,17 @@ export default function SchoolAdminDashboard(): JSX.Element {
 
     setFormLoading(true);
     try {
-      // Create student record
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .insert([
-          {
-            first_name: studentForm.firstName,
-            last_name: studentForm.lastName,
-            registration_number: studentForm.registrationNumber,
-            school_id: activeSchoolId,
-          },
-        ])
-        .select()
-        .single();
+      // Create the student and first enrollment in one server-validated database transaction.
+      const { error: onboardingError } = await supabase.rpc('create_student_and_enroll', {
+        target_school_id: activeSchoolId,
+        target_class_id: studentForm.classId,
+        target_term_id: studentForm.termId,
+        student_first_name: studentForm.firstName,
+        student_last_name: studentForm.lastName,
+        student_registration_number: studentForm.registrationNumber,
+      });
 
-      if (studentError) throw studentError;
-
-      // Create enrollment record
-      const { error: enrollmentError } = await supabase
-        .from('enrollments')
-        .insert([
-          {
-            student_id: studentData.id,
-            class_id: studentForm.classId,
-            term_id: studentForm.termId,
-            school_id: activeSchoolId,
-            status: 'active',
-          },
-        ]);
-
-      if (enrollmentError) throw enrollmentError;
+      if (onboardingError) throw onboardingError;
 
       setSuccessMessage(`Student '${studentForm.firstName} ${studentForm.lastName}' onboarded successfully!`);
       setStudentForm({ firstName: '', lastName: '', registrationNumber: '', classId: '', termId: '' });
