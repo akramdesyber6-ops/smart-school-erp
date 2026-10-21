@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select extensions.plan(4);
 
--- Fixtures use the seed school and its existing seeded teacher profiles.
+-- Fixtures use the seed school and existing seeded teacher profiles.
 -- Everything in this file is rolled back at the end; never target a remote DB.
 insert into public.schools (id, name, emis_code)
 values (
@@ -27,14 +27,20 @@ insert into public.profiles (
 )
 on conflict (id) do nothing;
 
+-- Record results while SET ROLE is active, then execute pgTAP assertions as
+-- the database owner so extension function privileges do not affect RLS tests.
+create temporary table rls_actual (
+  case_key text primary key,
+  actual_count integer not null
+);
+grant insert, select on rls_actual to authenticated;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c20e8400-e29b-41d4-a716-446655440001', true);
 
-select extensions.is(
-  (select count(*)::integer from public.schools),
-  1,
-  'a school administrator can read only their own school'
-);
+insert into pg_temp.rls_actual(case_key, actual_count)
+select 'school_admin_own_school_count', count(*)::integer
+from public.schools;
 
 with changed_rows as (
   update public.schools
@@ -42,31 +48,46 @@ with changed_rows as (
    where id = '550e8400-e29b-41d4-a716-446655440099'::uuid
   returning id
 )
+insert into pg_temp.rls_actual(case_key, actual_count)
+select 'school_admin_cross_tenant_update_count', count(*)::integer
+from changed_rows;
+
+reset role;
 select extensions.is(
-  (select count(*)::integer from changed_rows),
+  (select actual_count from pg_temp.rls_actual where case_key = 'school_admin_own_school_count'),
+  1,
+  'a school administrator can read only their own school'
+);
+select extensions.is(
+  (select actual_count from pg_temp.rls_actual where case_key = 'school_admin_cross_tenant_update_count'),
   0,
   'a school administrator cannot update another school'
 );
 
-reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c20e8400-e29b-41d4-a716-446655440002', true);
+insert into pg_temp.rls_actual(case_key, actual_count)
+select 'assigned_teacher_mark_count', count(*)::integer
+from public.markbook_entries;
+reset role;
 
 select extensions.ok(
-  (select count(*) > 0 from public.markbook_entries),
+  (select actual_count > 0 from pg_temp.rls_actual where case_key = 'assigned_teacher_mark_count'),
   'an assigned teacher can read marks for their assigned class/subjects'
 );
 
-reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c20e8400-e29b-41d4-a716-446655440099', true);
+insert into pg_temp.rls_actual(case_key, actual_count)
+select 'unassigned_teacher_mark_count', count(*)::integer
+from public.markbook_entries;
+reset role;
 
 select extensions.is(
-  (select count(*)::integer from public.markbook_entries),
+  (select actual_count from pg_temp.rls_actual where case_key = 'unassigned_teacher_mark_count'),
   0,
   'an unassigned same-school teacher cannot read markbook entries'
 );
 
-reset role;
 select * from extensions.finish();
 rollback;
