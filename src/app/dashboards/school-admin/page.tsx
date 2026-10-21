@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/useAuthStore';
-import { supabase, ClassRow } from '@/lib/supabase/api';
+import { supabase } from '@/lib/supabase/api';
 import { Users, BookOpen, GraduationCap, Plus, X, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 interface SchoolMetrics {
@@ -19,15 +19,6 @@ interface AcademicTerm {
   start_date: string;
   end_date: string;
   school_id: string;
-}
-
-interface StudentRow {
-  id: string;
-  first_name: string;
-  last_name: string;
-  registration_number: string;
-  school_id: string;
-  [key: string]: any;
 }
 
 interface ClassStream {
