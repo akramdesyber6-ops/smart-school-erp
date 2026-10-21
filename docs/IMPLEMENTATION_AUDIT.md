@@ -52,10 +52,11 @@ separate `super_admin` or `bursar` role.
 - Added the `teacher_id` and `marked_at` markbook columns expected by the teacher
   dashboard, with a database trigger that derives audit attribution from the active
   authenticated profile instead of trusting client payloads.
-- Added a database trigger that rejects direct client inserts of profile rows and
-  blocks client changes to `user_id`, `school_id`, `role`, and `is_active`;
-  trusted provisioning/administrative workflows must use server-side service-role
-  access.
+- Added database triggers that reject direct client inserts of profile rows and
+  block client changes to profile `id`, `user_id`, `school_id`, `role`, and
+  `is_active`; privileged provisioning workflows must use server-side service-role
+  access. The profile guard now runs on every update so the primary key cannot be
+  changed through an update that omits the other protected columns.
 - Added a student/parent identity-link migration and role-scoped read policies;
   student and parent dashboards read actual linked records only.
 - Added a school-admin workflow to link existing student/parent profiles and to
@@ -108,7 +109,7 @@ separate `super_admin` or `bursar` role.
   client will now be rejected and must be moved server-side.
 - The markbook audit trigger, protected-profile trigger, student/parent identity
   links, class/subject assignment checks, attendance-write policies, actor attribution,
-  and atomic student onboarding have only been statically reviewed. Test them for
+  profile-primary-key protection, and atomic student onboarding have only been statically reviewed. Test them for
   authenticated users, school admins, assigned/unassigned teachers, and the service
   role in a disposable Supabase instance before deployment. The audit/identity
   triggers explicitly allow trusted `postgres`/`supabase_admin` database roles
