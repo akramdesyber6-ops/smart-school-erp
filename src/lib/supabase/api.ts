@@ -149,9 +149,11 @@ export async function getMarkbookEntries({ classId, termId, subjectId }: { class
 }
 
 // Export default for convenience
-export default {
+const supabaseApi = {
   supabase,
   getClassesAndSubjectsForCurrentSchool,
   getEnrollmentRoster,
   getMarkbookEntries,
 };
+
+export default supabaseApi;
