@@ -506,9 +506,9 @@ ON CONFLICT (id) DO NOTHING;
 
 -- =====================================================================
 -- S5 NCDC Grades (Traditional: BOT 10%, MOT 20%, EOT 70%)
--- Calculation Examples:
--- David Physics: BOT=9/10 (90%), MOT=18/20 (90%), EOT=65/70 (93%) => Total = 0.9 + 3.6 + 65.1 = 89.6% => D1
--- David Chemistry: BOT=8/10 (80%), MOT=16/20 (80%), EOT=55/70 (79%) => Total = 0.8 + 3.2 + 55.3 = 59.3% => D5
+-- Component scores are already weighted points (out of 10, 20, and 70).
+-- David Physics: 9 + 18 + 65 = 92% => D1
+-- David Chemistry: 8 + 16 + 55 = 79% => D1 under the configured grade thresholds
 -- =====================================================================
 
 -- David's NCDC Physics (High performance)
@@ -536,8 +536,8 @@ VALUES (
   9,
   18,
   65,
-  89.6,
-  90,
+  92,
+  92,
   'D1'
 )
 ON CONFLICT (id) DO NOTHING;
@@ -567,9 +567,9 @@ VALUES (
   8,
   16,
   55,
-  59.3,
-  59,
-  'D5'
+  79,
+  79,
+  'D1'
 )
 ON CONFLICT (id) DO NOTHING;
 
