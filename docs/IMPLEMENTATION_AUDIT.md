@@ -61,7 +61,9 @@ the checked-in App Router.
 - Corrected NCDC total calculation: score inputs are already contribution points
   with maxima 10/20/70, so the final score is their sum rather than applying those
   weights a second time. Blank components remain null, and a legitimate zero total
-  is preserved.
+  is preserved. Corrected example seed totals and added `NOT VALID` database checks
+  for the three component ranges; legacy rows must be audited before validating the
+  constraints against the whole table.
 
 ## Static security findings and remaining gaps
 
