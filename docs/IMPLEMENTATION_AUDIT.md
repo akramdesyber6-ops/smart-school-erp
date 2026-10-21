@@ -113,10 +113,15 @@ separate `super_admin` or `bursar` role.
   role in a disposable Supabase instance before deployment. The audit/identity
   triggers explicitly allow trusted `postgres`/`supabase_admin` database roles
   for migration/seed workflows.
-- No test script or dependency lockfile is present in the repository root.
-  Static review does not verify deployed PostgreSQL grants/policies, storage
-  permissions, environment secrets, or cross-tenant behaviour against a live
-  Supabase project.
+- Added a Node test-runner script for route-role boundaries, public-route
+  matching, and role redirect mapping; CI runs it alongside type checking, ESLint,
+  and production build. These tests exercise route helpers, not database RLS.
+- The repository does not currently commit a package-manager lockfile. CI installs
+  dependencies with pnpm without frozen-lockfile enforcement, so dependency
+  reproducibility should be improved by committing the intended lockfile.
+- Static review and CI do not verify deployed PostgreSQL grants/policies, storage
+  permissions, environment secrets, invitation email delivery, or cross-tenant
+  behavior against a live Supabase project.
 
 ## Checks still required in a development environment
 
@@ -126,13 +131,14 @@ dependencies with pnpm:
 
 ```sh
 pnpm type-check
+pnpm test
 pnpm lint
 pnpm build
 ```
 
-No automated test script is currently defined in `package.json`. Apply migrations
-to a disposable local Supabase instance and use two test schools with distinct
-teacher/admin, assigned/unassigned teacher, student, and parent accounts to verify
-that users cannot read or mutate another school's rows. Also verify that non-admin users receive no rows from
+CI runs type checking, the route-role tests, ESLint, and production build. Apply
+migrations to a disposable local Supabase instance and use two test schools with
+distinct teacher/admin, assigned/unassigned teacher, student, and parent accounts
+to verify that users cannot read or mutate another school's rows. Also verify that non-admin users receive no rows from
 `parents` and `student_parents`, while same-school admins can manage them. Do not
 run reset/destructive test commands against production.
