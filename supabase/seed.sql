@@ -134,40 +134,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- =====================================================================
--- 5. CLASS-SUBJECT ASSOCIATIONS
--- =====================================================================
-INSERT INTO public.class_subjects (id, class_id, subject_id, teacher_id)
-VALUES
-  -- Senior 1 (CBC) subjects
-  (
-    '960e8400-e29b-41d4-a716-446655440001'::uuid,
-    '850e8400-e29b-41d4-a716-446655440001'::uuid,
-    '950e8400-e29b-41d4-a716-446655440001'::uuid,
-    'a10e8400-e29b-41d4-a716-446655440001'::uuid
-  ), -- Teacher 1 (CBC)
-  (
-    '960e8400-e29b-41d4-a716-446655440002'::uuid,
-    '850e8400-e29b-41d4-a716-446655440001'::uuid,
-    '950e8400-e29b-41d4-a716-446655440002'::uuid,
-    'a10e8400-e29b-41d4-a716-446655440001'::uuid
-  ), -- Teacher 1 (CBC)
-  -- Senior 5 (NCDC) subjects
-  (
-    '960e8400-e29b-41d4-a716-446655440003'::uuid,
-    '850e8400-e29b-41d4-a716-446655440002'::uuid,
-    '950e8400-e29b-41d4-a716-446655440003'::uuid,
-    'a10e8400-e29b-41d4-a716-446655440002'::uuid
-  ), -- Teacher 2 (NCDC)
-  (
-    '960e8400-e29b-41d4-a716-446655440004'::uuid,
-    '850e8400-e29b-41d4-a716-446655440002'::uuid,
-    '950e8400-e29b-41d4-a716-446655440004'::uuid,
-    'a10e8400-e29b-41d4-a716-446655440002'::uuid
-  ) -- Teacher 2 (NCDC)
-ON CONFLICT (id) DO NOTHING;
-
--- =====================================================================
--- 6. AUTHENTICATION & PROFILE USERS
+-- 5. AUTHENTICATION & PROFILE USERS
 -- Note: In production, use Firebase/Supabase Auth Admin SDK
 -- For testing, we create placeholder user_ids (typically UUIDs from auth.users)
 -- =====================================================================
@@ -262,6 +229,41 @@ VALUES (
   'B.Sc Physics, M.Sc Chemistry, Secondary Teaching Certificate'
 )
 ON CONFLICT (id) DO NOTHING;
+
+
+-- =====================================================================
+-- 6. CLASS-SUBJECT ASSOCIATIONS
+-- =====================================================================
+INSERT INTO public.class_subjects (id, class_id, subject_id, teacher_id)
+VALUES
+  -- Senior 1 (CBC) subjects
+  (
+    '960e8400-e29b-41d4-a716-446655440001'::uuid,
+    '850e8400-e29b-41d4-a716-446655440001'::uuid,
+    '950e8400-e29b-41d4-a716-446655440001'::uuid,
+    'a10e8400-e29b-41d4-a716-446655440001'::uuid
+  ), -- Teacher 1 (CBC)
+  (
+    '960e8400-e29b-41d4-a716-446655440002'::uuid,
+    '850e8400-e29b-41d4-a716-446655440001'::uuid,
+    '950e8400-e29b-41d4-a716-446655440002'::uuid,
+    'a10e8400-e29b-41d4-a716-446655440001'::uuid
+  ), -- Teacher 1 (CBC)
+  -- Senior 5 (NCDC) subjects
+  (
+    '960e8400-e29b-41d4-a716-446655440003'::uuid,
+    '850e8400-e29b-41d4-a716-446655440002'::uuid,
+    '950e8400-e29b-41d4-a716-446655440003'::uuid,
+    'a10e8400-e29b-41d4-a716-446655440002'::uuid
+  ), -- Teacher 2 (NCDC)
+  (
+    '960e8400-e29b-41d4-a716-446655440004'::uuid,
+    '850e8400-e29b-41d4-a716-446655440002'::uuid,
+    '950e8400-e29b-41d4-a716-446655440004'::uuid,
+    'a10e8400-e29b-41d4-a716-446655440002'::uuid
+  ) -- Teacher 2 (NCDC)
+ON CONFLICT (id) DO NOTHING;
+
 
 -- =====================================================================
 -- 7. STUDENT PROFILES (WITH PARENT RELATIONSHIPS)
