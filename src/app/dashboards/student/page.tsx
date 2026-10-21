@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, BookOpen, CalendarCheck, GraduationCap, RefreshCw, UserRound } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, GraduationCap, RefreshCw, User } from 'lucide-react';
 import useAuthStore, { type AuthProfile, type AuthSession } from '@/lib/stores/useAuthStore';
 import { supabase } from '@/lib/supabase/api';
 
@@ -182,7 +182,7 @@ export default function StudentDashboard(): JSX.Element {
     return (
       <main className="min-h-screen bg-slate-50 p-6">
         <section className="mx-auto mt-16 max-w-2xl rounded-2xl border bg-white p-8 shadow-sm">
-          <UserRound className="h-9 w-9 text-indigo-600" aria-hidden="true" />
+          <User className="h-9 w-9 text-indigo-600" aria-hidden="true" />
           <h1 className="mt-3 text-2xl font-bold text-slate-900">Your student record is not linked yet</h1>
           <p className="mt-2 text-slate-600">Your account is signed in, but the school has not linked it to a student record. No sample or other student data is shown here. Please contact your school administrator.</p>
           <button type="button" onClick={() => router.replace('/login')} className="mt-5 rounded-lg border px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">Return to login</button>
