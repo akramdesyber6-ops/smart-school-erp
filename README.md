@@ -63,15 +63,16 @@ Use Node.js 20 or later and pnpm. There is currently no committed package-manage
 
    The service-role key is privileged: keep it server-only, never name it `NEXT_PUBLIC_*`, and never commit it. It is used only by server-side account-invitation code. Invitation delivery also requires a configured Supabase Auth email provider and a valid production `NEXT_PUBLIC_APP_URL` using HTTPS.
 
-3. Apply migrations to a development or staging Supabase project. Review the SQL first, link the CLI to the intended project, and then run:
+3. Apply migrations to a development or staging Supabase project. A committed `supabase/config.toml` configures the local CLI and seed file. Review the SQL and select the correct project before applying any change:
 
    ```sh
    pnpm exec supabase login
    pnpm exec supabase link --project-ref YOUR_PROJECT_REF
+   pnpm exec supabase db push --dry-run
    pnpm db:setup
    ```
 
-   `pnpm db:setup` runs `supabase db push`. Do not use a production project for experimental policy or migration testing. The new student/parent links, invite RPCs, markbook constraints, assignment checks, attendance policies, and student-onboarding RPC are unavailable until their migrations have been applied.
+   `pnpm db:setup` runs `supabase db push`. The dry run is a preview, not a security test. If your remote database already contains tables created outside these migrations, reconcile its migration history first; do not push blindly or try to baseline a production database by trial and error. Do not use a production project for experimental policy or migration testing. The new student/parent links, invite RPCs, markbook constraints, assignment checks, attendance policies, and student-onboarding RPC are unavailable until their migrations have been applied.
 
 4. Start the development server:
 
