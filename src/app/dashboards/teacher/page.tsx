@@ -499,6 +499,9 @@ ${lessonPlan.assessment}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
           <p className="text-gray-500 mt-1">Manage grades, lessons, and student progress</p>
+          <a href="/dashboards/teacher/attendance" className="mt-3 inline-flex w-fit items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            Open Attendance Register
+          </a>
           {currentTerm && (
             <p className="text-gray-400 text-sm mt-2">Current Term: {currentTerm.name}</p>
           )}
