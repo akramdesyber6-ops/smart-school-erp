@@ -80,7 +80,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
 
       if (profile.role !== 'school_admin' && profile.role !== 'admin') {
         setError('Unauthorized: Only school admins can access this dashboard.');
-        setTimeout(() => router.push('/dashboard'), 2000);
+        setTimeout(() => router.replace('/'), 2000);
         return;
       }
 
