@@ -375,6 +375,12 @@ export default function SchoolAdminDashboard(): JSX.Element {
             <Users className="h-5 w-5" aria-hidden="true" />
             Link Student / Parent Accounts
           </a>
+          <a
+            href="/dashboards/school-admin/attendance"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            Attendance Register
+          </a>
           <button
             onClick={() => setModalOpen('create-stream')}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
