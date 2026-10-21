@@ -71,8 +71,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Start disposable Supabase stack
-        run: pnpm exec supabase start
+      - name: Start disposable Supabase database
+        # Only PostgreSQL is required for applying migrations and pgTAP tests.
+        # Excluding optional API/studio/observability containers reduces Docker pulls.
+        run: pnpm exec supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       - name: Apply migrations and seed locally
         run: pnpm exec supabase db reset --local
