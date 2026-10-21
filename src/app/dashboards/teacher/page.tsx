@@ -272,10 +272,11 @@ export default function TeacherDashboard(): JSX.Element {
     loadEnrollments();
   }, [selectedAssignment, activeSchoolId, currentTerm]);
 
-  // Calculate total percentage for NCDC
+  // The NCDC inputs are component points (BOT /10, MOT /20, EOT /70).
+  // They already sum to the final percentage, so do not apply the weights twice.
   const calculateNcdcTotal = (bot: number | null, mot: number | null, eot: number | null): number | null => {
     if (bot === null || mot === null || eot === null) return null;
-    return bot * 0.1 + mot * 0.2 + eot * 0.7;
+    return bot + mot + eot;
   };
 
   // Save markbook entry
@@ -362,7 +363,7 @@ export default function TeacherDashboard(): JSX.Element {
       if (err?.code === '23503') {
         setError('Invalid subject or term assignment. Please refresh and try again.');
       } else {
-        setError(err?.message || 'Unable to save marks. Please try again.');
+        setError('Unable to save marks. Check the entered values and your assignment permissions, then try again.');
       }
     } finally {
       setSaving(false);
@@ -649,7 +650,7 @@ ${lessonPlan.assessment}
                     <tbody>
                       {enrollments.map((enrollment) => {
                         const entry = markbookData.get(enrollment.student_id);
-                        const total = calculateNcdcTotal(entry?.bot_score || null, entry?.mot_score || null, entry?.eot_score || null);
+                        const total = calculateNcdcTotal(entry?.bot_score ?? null, entry?.mot_score ?? null, entry?.eot_score ?? null);
                         const grade = mapGradeToNcdcDivision(total);
                         return (
                           <tr key={enrollment.student_id} className="border-t hover:bg-gray-50">
