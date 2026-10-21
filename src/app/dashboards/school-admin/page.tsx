@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/useAuthStore';
-import { supabase, ClassRow } from '@/lib/supabase/api';
+import { supabase } from '@/lib/supabase/api';
 import { Users, BookOpen, GraduationCap, Plus, X, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 interface SchoolMetrics {
@@ -21,19 +21,11 @@ interface AcademicTerm {
   school_id: string;
 }
 
-interface StudentRow {
-  id: string;
-  first_name: string;
-  last_name: string;
-  registration_number: string;
-  school_id: string;
-  [key: string]: any;
-}
-
 interface ClassStream {
   id: string;
   name: string;
   stream: string | null;
+  curriculum: 'CBC' | 'NCDC';
   school_id: string;
 }
 
@@ -80,7 +72,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
 
       if (profile.role !== 'school_admin' && profile.role !== 'admin') {
         setError('Unauthorized: Only school admins can access this dashboard.');
-        setTimeout(() => router.push('/dashboard'), 2000);
+        setTimeout(() => router.replace('/'), 2000);
         return;
       }
 
@@ -96,26 +88,26 @@ export default function SchoolAdminDashboard(): JSX.Element {
 
         if (schoolError) throw schoolError;
 
-        // Fetch student count
-        const { data: studentsData, error: studentsError } = await supabase
+        // Use count queries so school metrics are not capped by the API page size.
+        const { count: studentsCount, error: studentsError } = await supabase
           .from('students')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .eq('school_id', activeSchoolId);
 
-        if (studentsError && studentsError.code !== 'PGRST116') throw studentsError;
+        if (studentsError) throw studentsError;
 
-        // Fetch teacher count
-        const { data: teachersData, error: teachersError } = await supabase
+        const { count: teachersCount, error: teachersError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id', { count: 'exact', head: true })
           .eq('school_id', activeSchoolId)
-          .eq('role', 'teacher');
+          .eq('role', 'teacher')
+          .eq('is_active', true);
 
-        if (teachersError && teachersError.code !== 'PGRST116') throw teachersError;
+        if (teachersError) throw teachersError;
 
         setMetrics({
-          totalStudents: studentsData?.length || 0,
-          totalTeachers: teachersData?.length || 0,
+          totalStudents: studentsCount ?? 0,
+          totalTeachers: teachersCount ?? 0,
           emisCode: schoolData?.emis_code || null,
           schoolName: schoolData?.name || 'School',
         });
@@ -123,7 +115,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
         // Fetch classes and streams
         const { data: classesData, error: classesError } = await supabase
           .from('classes')
-          .select('id, name, stream, school_id')
+          .select('id, name, stream, curriculum, school_id')
           .eq('school_id', activeSchoolId)
           .order('name', { ascending: true });
 
@@ -205,36 +197,17 @@ export default function SchoolAdminDashboard(): JSX.Element {
 
     setFormLoading(true);
     try {
-      // Create student record
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .insert([
-          {
-            first_name: studentForm.firstName,
-            last_name: studentForm.lastName,
-            registration_number: studentForm.registrationNumber,
-            school_id: activeSchoolId,
-          },
-        ])
-        .select()
-        .single();
+      // Create the student and first enrollment in one server-validated database transaction.
+      const { error: onboardingError } = await supabase.rpc('create_student_and_enroll', {
+        target_school_id: activeSchoolId,
+        target_class_id: studentForm.classId,
+        target_term_id: studentForm.termId,
+        student_first_name: studentForm.firstName,
+        student_last_name: studentForm.lastName,
+        student_registration_number: studentForm.registrationNumber,
+      });
 
-      if (studentError) throw studentError;
-
-      // Create enrollment record
-      const { error: enrollmentError } = await supabase
-        .from('enrollments')
-        .insert([
-          {
-            student_id: studentData.id,
-            class_id: studentForm.classId,
-            term_id: studentForm.termId,
-            school_id: activeSchoolId,
-            status: 'active',
-          },
-        ]);
-
-      if (enrollmentError) throw enrollmentError;
+      if (onboardingError) throw onboardingError;
 
       setSuccessMessage(`Student '${studentForm.firstName} ${studentForm.lastName}' onboarded successfully!`);
       setStudentForm({ firstName: '', lastName: '', registrationNumber: '', classId: '', termId: '' });
@@ -376,7 +349,20 @@ export default function SchoolAdminDashboard(): JSX.Element {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4 mb-8">
+          <a
+            href="/dashboards/school-admin/accounts"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-600 px-4 py-2 font-medium text-indigo-700 transition hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            <Users className="h-5 w-5" aria-hidden="true" />
+            Link Student / Parent Accounts
+          </a>
+          <a
+            href="/dashboards/school-admin/attendance"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          >
+            Attendance Register
+          </a>
           <button
             onClick={() => setModalOpen('create-stream')}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
@@ -418,7 +404,7 @@ export default function SchoolAdminDashboard(): JSX.Element {
                     <tr key={cls.id} className="border-t hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm text-gray-900">{cls.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{cls.stream || '—'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">CBC</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{cls.curriculum}</td>
                     </tr>
                   ))}
                 </tbody>

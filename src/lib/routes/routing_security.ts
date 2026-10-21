@@ -10,6 +10,8 @@ const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
 const ROLE_RESTRICTED_ROUTES: ReadonlyArray<{ prefix: string; allowedRoles: readonly ApplicationRole[] }> = [
   { prefix: '/dashboards/school-admin', allowedRoles: ['admin', 'school_admin'] },
   { prefix: '/dashboards/teacher', allowedRoles: ['admin', 'teacher'] },
+  { prefix: '/dashboards/student', allowedRoles: ['student'] },
+  { prefix: '/dashboards/parent', allowedRoles: ['parent'] },
 ];
 
 export function isPublicRoute(pathname: string): boolean {
@@ -21,9 +23,9 @@ export function isPublicRoute(pathname: string): boolean {
 export function getDashboardPathForRole(role: unknown): string {
   if (role === 'admin' || role === 'school_admin') return '/dashboards/school-admin';
   if (role === 'teacher') return '/dashboards/teacher';
+  if (role === 'student') return '/dashboards/student';
+  if (role === 'parent') return '/dashboards/parent';
 
-  // Student and parent portals are not implemented yet. Keep them on the public
-  // landing page instead of navigating them to a route that does not exist.
   return '/';
 }
 

@@ -154,7 +154,7 @@ export default function TeacherDashboard(): JSX.Element {
 
       if (profile.role !== 'teacher' && profile.role !== 'admin') {
         setError('Unauthorized: Only teachers can access this dashboard.');
-        setTimeout(() => router.push('/dashboard'), 2000);
+        setTimeout(() => router.replace('/'), 2000);
         return;
       }
 
@@ -245,7 +245,15 @@ export default function TeacherDashboard(): JSX.Element {
           .order('students.first_name', { ascending: true });
 
         if (enrollmentsError && enrollmentsError.code !== 'PGRST116') throw enrollmentsError;
-        setEnrollments((enrollmentsData || []) as StudentEnrollment[]);
+        const enrollmentRows = (enrollmentsData ?? []) as unknown as Array<
+          Omit<StudentEnrollment, 'students'> & {
+            students?: StudentEnrollment['students'] | NonNullable<StudentEnrollment['students']>[];
+          }
+        >;
+        setEnrollments(enrollmentRows.map((row): StudentEnrollment => ({
+          ...row,
+          students: Array.isArray(row.students) ? row.students[0] : row.students,
+        })));
 
         // Load existing markbook entries for this class/subject/term combination
         const { data: markbookData, error: markbookError } = await supabase
@@ -272,10 +280,11 @@ export default function TeacherDashboard(): JSX.Element {
     loadEnrollments();
   }, [selectedAssignment, activeSchoolId, currentTerm]);
 
-  // Calculate total percentage for NCDC
+  // The NCDC inputs are component points (BOT /10, MOT /20, EOT /70).
+  // They already sum to the final percentage, so do not apply the weights twice.
   const calculateNcdcTotal = (bot: number | null, mot: number | null, eot: number | null): number | null => {
     if (bot === null || mot === null || eot === null) return null;
-    return bot * 0.1 + mot * 0.2 + eot * 0.7;
+    return bot + mot + eot;
   };
 
   // Save markbook entry
@@ -286,7 +295,10 @@ export default function TeacherDashboard(): JSX.Element {
     }
     setSaving(true);
     try {
+      // Keep trusted context fields after user-editable form data so a stale or
+      // modified entry cannot override the active assignment/tenant identifiers.
       const entryToSave = {
+        ...entry,
         student_id: studentId,
         class_id: selectedAssignment.classId,
         subject_id: selectedAssignment.subjectId,
@@ -294,7 +306,6 @@ export default function TeacherDashboard(): JSX.Element {
         school_id: activeSchoolId,
         teacher_id: profile.id,
         marked_at: new Date().toISOString(),
-        ...entry,
       };
 
       // For CBC, save competency score and observation
@@ -310,17 +321,26 @@ export default function TeacherDashboard(): JSX.Element {
         if (err) throw err;
       } else {
         // For NCDC, calculate and save total percentage and grade
-        const total = calculateNcdcTotal(entry.bot_score, entry.mot_score, entry.eot_score);
+        const bot = entry.bot_score ?? null;
+        const mot = entry.mot_score ?? null;
+        const eot = entry.eot_score ?? null;
+        if ((bot !== null && (bot < 0 || bot > 10)) ||
+            (mot !== null && (mot < 0 || mot > 20)) ||
+            (eot !== null && (eot < 0 || eot > 70))) {
+          setError('Enter BOT from 0–10, MOT from 0–20, and EOT from 0–70 before saving.');
+          return;
+        }
+        const total = calculateNcdcTotal(bot, mot, eot);
         const grade = mapGradeToNcdcDivision(total);
         const { error: err } = await supabase.from('markbook_entries').upsert(
           {
             ...entryToSave,
-            bot_score: entry.bot_score,
-            mot_score: entry.mot_score,
-            eot_score: entry.eot_score,
+            bot_score: bot,
+            mot_score: mot,
+            eot_score: eot,
             total_percentage: total,
             grade: grade,
-            raw_score: total ? Math.round(total) : null,
+            raw_score: total !== null ? Math.round(total) : null,
           },
           { onConflict: 'student_id,class_id,subject_id,term_id' }
         );
@@ -328,7 +348,21 @@ export default function TeacherDashboard(): JSX.Element {
       }
 
       const updated = new Map(markbookData);
-      updated.set(studentId, entryToSave);
+      updated.set(studentId, {
+        ...entryToSave,
+        ...(selectedAssignment.curriculum === 'NCDC'
+          ? {
+              bot_score: entry.bot_score ?? null,
+              mot_score: entry.mot_score ?? null,
+              eot_score: entry.eot_score ?? null,
+              total_percentage: calculateNcdcTotal(entry.bot_score ?? null, entry.mot_score ?? null, entry.eot_score ?? null),
+              raw_score: calculateNcdcTotal(entry.bot_score ?? null, entry.mot_score ?? null, entry.eot_score ?? null) !== null
+                ? Math.round(calculateNcdcTotal(entry.bot_score ?? null, entry.mot_score ?? null, entry.eot_score ?? null) as number)
+                : null,
+              grade: mapGradeToNcdcDivision(calculateNcdcTotal(entry.bot_score ?? null, entry.mot_score ?? null, entry.eot_score ?? null)),
+            }
+          : { competency_score: entry.competency_score ?? null, observation: entry.observation ?? null }),
+      });
       setMarkbookData(updated);
       setSuccess('Grades saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
@@ -337,7 +371,7 @@ export default function TeacherDashboard(): JSX.Element {
       if (err?.code === '23503') {
         setError('Invalid subject or term assignment. Please refresh and try again.');
       } else {
-        setError(err?.message || 'Unable to save marks. Please try again.');
+        setError('Unable to save marks. Check the entered values and your assignment permissions, then try again.');
       }
     } finally {
       setSaving(false);
@@ -345,25 +379,34 @@ export default function TeacherDashboard(): JSX.Element {
   };
 
   // Handle CBC competency score change
-  const handleCbcScoreChange = (studentId: string, score: number) => {
-    const entry = markbookData.get(studentId) || { student_id: studentId };
-    entry.competency_score = score;
-    saveMarkbookEntry(studentId, entry as MarkbookEntry);
+  const createEditableMark = (studentId: string): MarkbookEntry => ({
+    ...(markbookData.get(studentId) ?? {}),
+    student_id: studentId,
+    class_id: selectedAssignment?.classId ?? '',
+    subject_id: selectedAssignment?.subjectId ?? '',
+    term_id: currentTerm?.id ?? '',
+    school_id: activeSchoolId ?? '',
+  });
+
+  const handleCbcScoreChange = (studentId: string, score: number | null) => {
+    const entry: MarkbookEntry = { ...createEditableMark(studentId), competency_score: score };
+    setMarkbookData(new Map(markbookData).set(studentId, entry));
+    void saveMarkbookEntry(studentId, entry);
   };
 
-  // Handle CBC observation change
+  // Keep CBC text editing local while typing and persist when the field loses focus.
   const handleCbcObservationChange = (studentId: string, observation: string) => {
-    const entry = markbookData.get(studentId) || { student_id: studentId };
-    entry.observation = observation;
+    const entry: MarkbookEntry = { ...createEditableMark(studentId), observation };
+    setMarkbookData(new Map(markbookData).set(studentId, entry));
   };
 
   // Handle NCDC score change
-  const handleNcdcScoreChange = (studentId: string, field: 'bot' | 'mot' | 'eot', value: number) => {
-    const entry = markbookData.get(studentId) || { student_id: studentId };
+  const handleNcdcScoreChange = (studentId: string, field: 'bot' | 'mot' | 'eot', value: number | null) => {
+    const entry: MarkbookEntry = { ...createEditableMark(studentId) };
     if (field === 'bot') entry.bot_score = value;
     if (field === 'mot') entry.mot_score = value;
     if (field === 'eot') entry.eot_score = value;
-    setMarkbookData(new Map(markbookData.set(studentId, entry as MarkbookEntry)));
+    setMarkbookData(new Map(markbookData).set(studentId, entry));
   };
 
   // Save NCDC scores
@@ -456,6 +499,9 @@ ${lessonPlan.assessment}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
           <p className="text-gray-500 mt-1">Manage grades, lessons, and student progress</p>
+          <a href="/dashboards/teacher/attendance" className="mt-3 inline-flex w-fit items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            Open Attendance Register
+          </a>
           {currentTerm && (
             <p className="text-gray-400 text-sm mt-2">Current Term: {currentTerm.name}</p>
           )}
@@ -493,15 +539,15 @@ ${lessonPlan.assessment}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Class and Subject</label>
             <select
-              value={selectedAssignment?.classId || ''}
+              value={selectedAssignment ? `${selectedAssignment.classId}:${selectedAssignment.subjectId}` : ''}
               onChange={(e) => {
-                const assignment = classSubjects.find((cs) => cs.classId === e.target.value);
+                const assignment = classSubjects.find((cs) => `${cs.classId}:${cs.subjectId}` === e.target.value);
                 if (assignment) setSelectedAssignment(assignment);
               }}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               {classSubjects.map((cs) => (
-                <option key={`${cs.classId}-${cs.subjectId}`} value={cs.classId}>
+                <option key={`${cs.classId}-${cs.subjectId}`} value={`${cs.classId}:${cs.subjectId}`}>
                   {cs.className} {cs.stream ? `- ${cs.stream}` : ''} ({cs.curriculum}) - {cs.subjectName}
                 </option>
               ))}
@@ -579,7 +625,7 @@ ${lessonPlan.assessment}
                             <td className="px-6 py-4 text-sm">
                               <select
                                 value={entry?.competency_score || ''}
-                                onChange={(e) => handleCbcScoreChange(enrollment.student_id, parseInt(e.target.value))}
+                                onChange={(e) => handleCbcScoreChange(enrollment.student_id, e.target.value === '' ? null : parseInt(e.target.value, 10))}
                                 className="px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               >
                                 <option value="">—</option>
@@ -592,7 +638,11 @@ ${lessonPlan.assessment}
                               <textarea
                                 value={entry?.observation || ''}
                                 onChange={(e) => handleCbcObservationChange(enrollment.student_id, e.target.value)}
-                                placeholder="Add observation..."
+                                onBlur={() => {
+                                  const entry = markbookData.get(enrollment.student_id);
+                                  if (entry) void saveMarkbookEntry(enrollment.student_id, entry);
+                                }}
+                                placeholder="Add observation..." 
                                 className="w-full px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                                 rows={2}
                               />
@@ -620,7 +670,7 @@ ${lessonPlan.assessment}
                     <tbody>
                       {enrollments.map((enrollment) => {
                         const entry = markbookData.get(enrollment.student_id);
-                        const total = calculateNcdcTotal(entry?.bot_score || null, entry?.mot_score || null, entry?.eot_score || null);
+                        const total = calculateNcdcTotal(entry?.bot_score ?? null, entry?.mot_score ?? null, entry?.eot_score ?? null);
                         const grade = mapGradeToNcdcDivision(total);
                         return (
                           <tr key={enrollment.student_id} className="border-t hover:bg-gray-50">
@@ -634,7 +684,7 @@ ${lessonPlan.assessment}
                                 min="0"
                                 max="10"
                                 value={entry?.bot_score ?? ''}
-                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'bot', parseFloat(e.target.value))}
+                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'bot', e.target.value === '' ? null : parseFloat(e.target.value))}
                                 placeholder="0"
                                 className="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                               />
@@ -645,7 +695,7 @@ ${lessonPlan.assessment}
                                 min="0"
                                 max="20"
                                 value={entry?.mot_score ?? ''}
-                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'mot', parseFloat(e.target.value))}
+                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'mot', e.target.value === '' ? null : parseFloat(e.target.value))}
                                 placeholder="0"
                                 className="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                               />
@@ -656,7 +706,7 @@ ${lessonPlan.assessment}
                                 min="0"
                                 max="70"
                                 value={entry?.eot_score ?? ''}
-                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'eot', parseFloat(e.target.value))}
+                                onChange={(e) => handleNcdcScoreChange(enrollment.student_id, 'eot', e.target.value === '' ? null : parseFloat(e.target.value))}
                                 placeholder="0"
                                 className="w-16 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                               />

@@ -1,200 +1,98 @@
-# Smart School ERP - Production-Ready Multi-Tenant SaaS
+# Smart School ERP
 
-A comprehensive School Enterprise Resource Planning (ERP) platform designed for schools across Uganda and East Africa.
+A Next.js 14 App Router application for school administration and academic workflows. The repository is in active development; passing frontend checks does **not** mean the database migrations have been applied or tenant isolation has been verified against a live Supabase project.
 
-## 🎯 Project Overview
+## What is implemented in this branch
 
-Smart School ERP is a modern, scalable multi-tenant SaaS platform that enables schools to manage:
-- Student lifecycle (registration, profiles, class assignment)
-- Teacher management and subject assignment
-- Academic structure (classes, streams, subjects, years, terms)
-- Daily attendance tracking and reporting
-- Exam creation, marks entry, auto-grading, and report cards
-- Fee management (structures, payments, balances, receipts)
-- Super admin dashboard with analytics
+- **Public entry and authentication:** landing page and Supabase sign-in.
+- **School administration:** school dashboard, live student/teacher counts, class/stream creation, student onboarding with its first enrollment in one database transaction.
+- **Portal onboarding:** invite an existing email address to a student or parent portal through a server-side API; link its profile to the matching student or parent record; create parent contacts and student-parent relationships.
+- **Teacher tools:** assignment-scoped CBC/NCDC markbook, lesson-plan template generation, and an attendance register for assigned classes.
+- **Student portal:** the signed-in student's own linked enrollments, marks, and attendance.
+- **Parent portal:** data for linked children only.
+- **Security work:** role-based route checks, tenant/assignment RLS policies, profile identity guards, markbook/attendance actor attribution, class/subject integrity checks, and security headers.
+- **Automated frontend checks:** TypeScript, a small route-role test suite, ESLint, and Next.js production build via GitHub Actions.
 
-## 🏗️ Tech Stack
+The student and parent portals require their profile to be linked to a corresponding school record. Existing records are not automatically linked.
 
-### Frontend
-- **Framework**: Next.js 14+ (App Router)
-- **Language**: TypeScript (strict mode)
-- **Styling**: Tailwind CSS
-- **UI Components**: shadcn/ui
-- **Forms**: React Hook Form + Zod
-- **State Management**: Zustand
-- **Charts**: Recharts
-- **Icons**: Lucide React
+## Not implemented yet
 
-### Backend
-- **Database**: Supabase PostgreSQL
-- **Authentication**: Supabase Auth
-- **File Storage**: Supabase Storage
-- **Security**: Row Level Security (RLS) on every table
+The current schema and role model do not include a bursar role, platform super-admin role, fees/payments, a full report-card workflow, or a dedicated finance dashboard. The code does not currently implement every feature described in older project planning material. Do not treat this branch as production-ready until its database changes have been applied and the required security checks completed.
 
-## 🔐 Architecture
+## Roles and routes
 
-### Multi-Tenant Design
-- Every business table includes `school_id` for data isolation
-- Row Level Security (RLS) enforces data isolation at the database level
-- Schools cannot access another school's data
+The current role model is `admin`, `school_admin`, `teacher`, `student`, and `parent`. There is no separate `bursar` or `super_admin` role in the current schema.
 
-### User Roles
-1. **SUPER_ADMIN** - Platform administrators
-2. **SCHOOL_ADMIN** - School administrators
-3. **TEACHER** - Teaching staff
-4. **BURSAR** - Finance staff
-5. **STUDENT** - Student accounts
+| Route | Purpose |
+| --- | --- |
+| `/` | Public landing page |
+| `/login` | Sign in |
+| `/dashboards/school-admin` | School administration |
+| `/dashboards/school-admin/accounts` | Invite portal users, link profiles, manage parent contacts/relationships |
+| `/dashboards/school-admin/attendance` | School attendance register |
+| `/dashboards/teacher` | Markbook and lesson-plan tools |
+| `/dashboards/teacher/attendance` | Teacher attendance register |
+| `/dashboards/student` | Linked student's records |
+| `/dashboards/parent` | Linked children's records |
 
-## 📁 Project Structure
+## Technology
 
-```
-smart-school-erp/
-├── apps/
-│   ├── web/                          # Next.js frontend application
-│   │   ├── src/
-│   │   │   ├── app/                  # Next.js app directory
-│   │   │   ├── components/           # Reusable UI components
-│   │   │   ├── features/             # Feature-based modules
-│   │   │   ├── hooks/                # Custom React hooks
-│   │   │   ├── lib/                  # Utility functions
-│   │   │   ├── stores/               # Zustand stores
-│   │   │   ├── types/                # TypeScript types
-│   │   │   └── middleware.ts         # Next.js middleware
-│   │   └── public/                   # Static assets
-│   └── api/                          # Backend API layer (if needed)
-├── packages/
-│   ├── db/                           # Database schema & migrations
-│   ├── shared-types/                 # Shared TypeScript types
-│   └── ui/                           # Shared UI components
-├── supabase/
-│   ├── migrations/                   # SQL migrations
-│   ├── policies/                     # RLS policies
-│   └── seed/                         # Seed data
-├── docs/
-│   ├── ARCHITECTURE.md               # Architecture documentation
-│   ├── DATABASE.md                   # Database schema documentation
-│   ├── DEPLOYMENT.md                 # Deployment guide
-│   └── API.md                        # API documentation
-├── .env.example                      # Environment variables template
-├── docker-compose.yml                # Local development setup
-└── package.json                      # Root package.json
-```
+- Next.js 14 App Router, React 18, TypeScript
+- Tailwind CSS and Lucide React
+- Supabase Auth, PostgreSQL, and row-level security
+- Zustand, Zod, React Hook Form
 
-## 📋 Features
+## Local setup
 
-### 1. School Management
-- Create schools
-- School branding
-- School settings
-- Subscription status tracking
+Use Node.js 20 or later and pnpm. There is currently no committed package-manager lockfile, so dependency versions are not fully reproducible yet.
 
-### 2. Student Management
-- Student registration
-- Profile management
-- Guardian information
-- Photo uploads
-- Class assignment
+1. Install dependencies:
 
-### 3. Teacher Management
-- Teacher profiles
-- Subject assignment
-- Class assignment
+   ```sh
+   pnpm install
+   ```
 
-### 4. Academic Structure
-- Classes management
-- Streams management
-- Subjects management
-- Academic years
-- Terms
+2. Copy `.env.example` to `.env.local` and fill in the values:
 
-### 5. Attendance
-- Daily attendance tracking
-- Attendance reports
+   ```dotenv
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_anon_key
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
+   SUPABASE_SERVICE_ROLE_KEY=your_server_only_service_role_key
+   ```
 
-### 6. Exams and Results
-- Exam creation
-- Marks entry
-- Auto-grading
-- Student rankings
-- Report card generation
+   The service-role key is privileged: keep it server-only, never name it `NEXT_PUBLIC_*`, and never commit it. It is used only by server-side account-invitation code. Invitation delivery also requires a configured Supabase Auth email provider and a valid production `NEXT_PUBLIC_APP_URL` using HTTPS.
 
-### 7. Fees Management
-- Fee structures
-- Payment tracking
-- Balance calculations
-- Receipt generation
+3. Apply migrations to a development or staging Supabase project. A committed `supabase/config.toml` configures the local CLI and seed file. Review the SQL and select the correct project before applying any change:
 
-### 8. Super Admin Dashboard
-- Total schools overview
-- Revenue analytics
-- Active subscriptions
-- Platform analytics
+   ```sh
+   pnpm exec supabase login
+   pnpm exec supabase link --project-ref YOUR_PROJECT_REF
+   pnpm exec supabase db push --dry-run
+   pnpm db:setup
+   ```
 
-## 🚀 Getting Started
+   `pnpm db:setup` runs `supabase db push`. The dry run is a preview, not a security test. If your remote database already contains tables created outside these migrations, reconcile its migration history first; do not push blindly or try to baseline a production database by trial and error. Do not use a production project for experimental policy or migration testing. The new student/parent links, invite RPCs, markbook constraints, assignment checks, attendance policies, and student-onboarding RPC are unavailable until their migrations have been applied.
 
-### Prerequisites
-- Node.js 18+ and npm/yarn/pnpm
-- PostgreSQL 14+
-- Supabase account
+4. Start the development server:
 
-### Installation
+   ```sh
+   pnpm dev
+   ```
 
-```bash
-# Clone repository
-git clone https://github.com/akramdesyber/smart-school-erp.git
-cd smart-school-erp
+## Commands and CI checks
 
-# Install dependencies
-pnpm install
-
-# Setup environment variables
-cp .env.example .env.local
-
-# Setup database
-pnpm run db:setup
-
-# Start development server
-pnpm run dev
+```sh
+pnpm type-check
+pnpm test
+pnpm lint
+pnpm build
 ```
 
-## 📚 Documentation
+GitHub Actions runs these four checks on pull requests to `main` and pushes to the feature branch used for this work. The route tests cover route-role mapping and redirects; they are not integration tests for PostgreSQL RLS.
 
-- [Architecture Guide](./docs/ARCHITECTURE.md)
-- [Database Schema](./docs/DATABASE.md)
-- [Deployment Guide](./docs/DEPLOYMENT.md)
-- [API Documentation](./docs/API.md)
+## Required verification before production
 
-## 🔒 Security
+Apply migrations to a **disposable** Supabase environment and test at least two schools with separate administrators, assigned/unassigned teachers, students, and parents. Verify both allowed and denied reads/writes, including cross-school IDs, teacher class/subject assignments, attendance upserts, parent-child links, profile role/tenant changes, and the two onboarding RPC functions. Confirm PostgREST relationship names in that database. Never run reset/destructive test commands against production data.
 
-- TypeScript strict mode for type safety
-- Row Level Security (RLS) on all database tables
-- Supabase Auth for authentication
-- Environment variable management
-- Input validation with Zod
-- CORS and security headers configured
-
-## 📦 Deployment
-
-### Vercel (Frontend)
-1. Connect repository to Vercel
-2. Set environment variables
-3. Deploy
-
-### Supabase (Backend)
-1. Create Supabase project
-2. Run migrations
-3. Enable RLS policies
-
-See [Deployment Guide](./docs/DEPLOYMENT.md) for detailed instructions.
-
-## 📄 License
-
-MIT
-
-## 🤝 Contributing
-
-Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-## 📞 Support
-
-For support, email support@smartscholerp.com or open an issue on GitHub.
+Also verify portal email delivery and Vercel's deployment/build logs. The current GitHub Actions build passes, but it does not prove Vercel environment variables are configured or that Supabase policies work in the deployed project. See [docs/IMPLEMENTATION_AUDIT.md](./docs/IMPLEMENTATION_AUDIT.md) for the current source audit and outstanding items.
