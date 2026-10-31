@@ -244,6 +244,30 @@ revoke all on function policies.can_view_student_finance(uuid, uuid) from public
 grant execute on function policies.can_manage_finance(uuid) to authenticated, service_role;
 grant execute on function policies.can_view_student_finance(uuid, uuid) to authenticated, service_role;
 
+-- Bursars need the minimum school-scoped learner and enrollment data required
+-- to issue and reconcile invoices; they do not gain school-admin write access.
+drop policy if exists erp_students_read on public.students;
+create policy erp_students_read on public.students
+  for select to authenticated using (
+    policies.can_manage_finance(school_id)
+    or exists (
+      select 1 from public.enrollments e
+      where e.student_id = students.id
+        and policies.is_teacher_for_class(e.class_id)
+    )
+    or policies.is_current_student(id)
+    or policies.is_parent_of_student(id)
+  );
+
+drop policy if exists erp_enrollments_read on public.enrollments;
+create policy erp_enrollments_read on public.enrollments
+  for select to authenticated using (
+    policies.can_manage_finance(school_id)
+    or policies.is_teacher_for_class(class_id)
+    or policies.is_current_student(student_id)
+    or policies.is_parent_of_student(student_id)
+  );
+
 alter table public.fee_categories enable row level security;
 alter table public.fee_structures enable row level security;
 alter table public.student_invoices enable row level security;
@@ -684,6 +708,7 @@ select
   i.due_date,
   i.status,
   i.notes,
+  i.created_at,
   s.first_name,
   s.last_name,
   s.registration_number,
