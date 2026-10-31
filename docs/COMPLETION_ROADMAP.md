@@ -45,7 +45,7 @@ Global theme variables and reusable base component classes live in `src/app/glob
 
 ### 2. Fees and finance
 
-<badge>First implementation delivered on `feat/erp-fees-and-payments`; database integration checks are pending.</badge>
+**Status:** First implementation delivered on `feat/erp-fees-and-payments`; database integration checks are pending.
 
 Implemented in this branch:
 
