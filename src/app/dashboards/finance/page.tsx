@@ -136,6 +136,9 @@ export default function FinanceDashboard(): JSX.Element {
   const [savingStructure, setSavingStructure] = useState(false);
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
+  const [reversingPayment, setReversingPayment] = useState(false);
+  const [reversePaymentId, setReversePaymentId] = useState<string | null>(null);
+  const [reversalReason, setReversalReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -453,6 +456,33 @@ export default function FinanceDashboard(): JSX.Element {
     }
   };
 
+  const reversePayment = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!reversePaymentId || !reversalReason.trim()) {
+      setError('Select a receipt and enter a reversal reason.');
+      return;
+    }
+
+    setReversingPayment(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const { error: rpcError } = await supabase.rpc('reverse_fee_payment', {
+        target_payment_id: reversePaymentId,
+        target_reversal_reason: reversalReason.trim(),
+      });
+      if (rpcError) throw rpcError;
+      setNotice('Receipt reversed. The outstanding invoice balance has been recalculated.');
+      setReversePaymentId(null);
+      setReversalReason('');
+      await loadData();
+    } catch (reverseError) {
+      setError(reverseError instanceof Error ? reverseError.message : 'The receipt could not be reversed.');
+    } finally {
+      setReversingPayment(false);
+    }
+  };
+
   if (!authorized || loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
@@ -725,11 +755,35 @@ export default function FinanceDashboard(): JSX.Element {
                           <p className="text-sm font-bold tabular-nums text-slate-900">{formatUgx(payment.amount)}</p>
                           <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${payment.status === 'posted' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{humanStatus(payment.status)}</span>
                           <Link href={`/dashboards/finance/receipts/${payment.id}`} className="mt-1 block text-xs font-semibold text-indigo-600 hover:text-indigo-800">View / print receipt</Link>
+                          {payment.status === 'posted' && (
+                            <button type="button" onClick={() => { setReversePaymentId(payment.id); setReversalReason(''); setError(null); }} className="mt-1 text-xs font-semibold text-rose-600 hover:text-rose-800">
+                              Reverse payment
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
                   })}
                 </div>
+              )}
+              {reversePaymentId && (
+                <form onSubmit={reversePayment} className="mt-4 space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <div>
+                    <p className="text-sm font-bold text-rose-900">Reverse receipt {payments.find((payment) => payment.id === reversePaymentId)?.receipt_number}</p>
+                    <p className="mt-1 text-xs text-rose-800">This action is retained in the audit history and restores the amount to the invoice balance.</p>
+                  </div>
+                  <label className="block text-sm font-medium text-rose-900">
+                    Reason for reversal
+                    <textarea value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} className="mt-1 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-rose-300" rows={3} minLength={4} required placeholder="Explain why this receipt must be reversed…" />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="submit" disabled={reversingPayment || !reversalReason.trim()} className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
+                      {reversingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Confirm reversal
+                    </button>
+                    <button type="button" onClick={() => { setReversePaymentId(null); setReversalReason(''); }} className={secondaryButtonClass}>Cancel</button>
+                  </div>
+                </form>
               )}
             </section>
           </div>
