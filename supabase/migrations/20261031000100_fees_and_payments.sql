@@ -589,7 +589,7 @@ declare
   v_paid numeric(14,2);
 begin
   v_school_id := policies.current_school_id();
-  if auth.uid() is null or not policies.can_manage_finance(v_school_id) then
+  if auth.uid() is null or v_school_id is null or not coalesce(policies.can_manage_finance(v_school_id), false) then
     raise exception 'Finance operator access is required'
       using errcode = '42501';
   end if;
