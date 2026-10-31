@@ -476,8 +476,8 @@ export default function FinanceDashboard(): JSX.Element {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div>
-            <Link href="/dashboards/school-admin" className="mb-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-indigo-700">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to school dashboard
+            <Link href="/" className="mb-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-indigo-700">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to portal
             </Link>
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm">
