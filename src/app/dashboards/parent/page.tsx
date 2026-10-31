@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, BookOpen, CalendarCheck, RefreshCw, Users, User } from 'lucide-react';
 import useAuthStore, { type AuthProfile, type AuthSession } from '@/lib/stores/useAuthStore';
 import { supabase } from '@/lib/supabase/api';
+import { formatUgx } from '@/lib/finance/financeUtils';
 
 type ParentRecord = {
   id: string;
@@ -59,6 +60,18 @@ type MarkRecord = {
   academic_terms: { name: string } | null;
 };
 
+type FeeBalanceRecord = {
+  id: string;
+  student_id: string;
+  invoice_number: string;
+  term_name: string;
+  due_date: string | null;
+  status: string;
+  total_amount: number;
+  paid_amount: number;
+  balance: number;
+};
+
 type AttendanceRecord = {
   id: string;
   student_id: string;
@@ -75,6 +88,7 @@ export default function ParentDashboard(): JSX.Element {
   const [enrollments, setEnrollments] = useState<EnrollmentRecord[]>([]);
   const [marks, setMarks] = useState<MarkRecord[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [feeBalances, setFeeBalances] = useState<FeeBalanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -125,6 +139,7 @@ export default function ParentDashboard(): JSX.Element {
         setEnrollments([]);
         setMarks([]);
         setAttendance([]);
+        setFeeBalances([]);
         return;
       }
 
@@ -146,6 +161,7 @@ export default function ParentDashboard(): JSX.Element {
       let enrollmentRows: EnrollmentRecord[] = [];
       let markRows: MarkRecord[] = [];
       let attendanceRows: AttendanceRecord[] = [];
+      let feeRows: FeeBalanceRecord[] = [];
 
       if (childIds.length > 0) {
         const [enrollmentResult, marksResult, attendanceResult] = await Promise.all([
@@ -170,15 +186,24 @@ export default function ParentDashboard(): JSX.Element {
             .eq('school_id', parentRow.school_id)
             .order('date', { ascending: false })
             .limit(Math.min(childIds.length * 10, 100)),
+          supabase
+            .from('student_invoice_balances')
+            .select('id, student_id, invoice_number, term_name, due_date, status, total_amount, paid_amount, balance')
+            .in('student_id', childIds)
+            .eq('school_id', parentRow.school_id)
+            .order('created_at', { ascending: false })
+            .limit(Math.min(childIds.length * 20, 200)),
         ]);
 
         if (enrollmentResult.error) throw enrollmentResult.error;
         if (marksResult.error) throw marksResult.error;
         if (attendanceResult.error) throw attendanceResult.error;
+        if (feesResult.error) throw feesResult.error;
 
         enrollmentRows = (enrollmentResult.data ?? []) as unknown as EnrollmentRecord[];
         markRows = (marksResult.data ?? []) as unknown as MarkRecord[];
         attendanceRows = (attendanceResult.data ?? []) as AttendanceRecord[];
+        feeRows = (feesResult.data ?? []) as FeeBalanceRecord[];
       }
 
       setParent(parentRow as ParentRecord);
@@ -186,6 +211,7 @@ export default function ParentDashboard(): JSX.Element {
       setEnrollments(enrollmentRows);
       setMarks(markRows);
       setAttendance(attendanceRows);
+      setFeeBalances(feeRows);
     } catch {
       setError('Family records could not be loaded. Confirm that the latest Supabase migrations are applied and that your school has linked your account to the correct parent record.');
     } finally {
@@ -284,6 +310,30 @@ export default function ParentDashboard(): JSX.Element {
                       {childEnrollments.length === 0 ? <p className="mt-2 text-sm text-slate-500">No enrollment records yet.</p> : (
                         <div className="mt-2 space-y-2">
                           {childEnrollments.map((item) => <div key={item.id} className="text-sm"><p className="font-medium text-slate-800">{item.classes?.name ?? 'Class not specified'}{item.classes?.stream ? ` · ${item.classes.stream}` : ''}</p><p className="text-slate-500">{item.academic_terms?.name ?? 'Term not specified'} · <span className="capitalize">{item.status}</span></p></div>)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-5 border-t pt-4">
+                      <h4 className="text-sm font-semibold text-slate-900">Fee balances</h4>
+                      {feeBalances.filter((invoice) => invoice.student_id === child.id).length === 0 ? (
+                        <p className="mt-2 text-sm text-slate-500">No fee invoices are recorded for this student yet.</p>
+                      ) : (
+                        <div className="mt-2 space-y-3">
+                          {feeBalances.filter((invoice) => invoice.student_id === child.id).map((invoice) => (
+                            <div key={invoice.id} className="rounded-lg bg-slate-50 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-indigo-700">{invoice.invoice_number}</p>
+                                <span className="text-xs capitalize text-slate-500">{invoice.status.replaceAll('_', ' ')}</span>
+                              </div>
+                              <p className="mt-1 text-xs text-slate-500">{invoice.term_name} · Due {invoice.due_date ?? 'not set'}</p>
+                              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                <div><p className="text-slate-500">Total</p><p className="mt-0.5 font-semibold text-slate-800">{formatUgx(invoice.total_amount)}</p></div>
+                                <div><p className="text-slate-500">Paid</p><p className="mt-0.5 font-semibold text-emerald-700">{formatUgx(invoice.paid_amount)}</p></div>
+                                <div><p className="text-slate-500">Balance</p><p className="mt-0.5 font-semibold text-slate-900">{formatUgx(invoice.balance)}</p></div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
