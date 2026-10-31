@@ -13,7 +13,7 @@
     "db:setup": "supabase db push",
     "db:reset": "supabase db reset",
     "db:seed": "node supabase/seed/main.js",
-    "test": "tsx --test src/lib/routes/routing_security.test.ts"
+    "test": "tsx --test src/lib/routes/routing_security.test.ts src/lib/finance/financeUtils.test.ts"
   },
   "dependencies": {
     "react": "^18.3.0",

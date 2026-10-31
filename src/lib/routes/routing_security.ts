@@ -1,6 +1,6 @@
 /** Centralized authentication navigation rules. */
 
-export type ApplicationRole = 'admin' | 'school_admin' | 'teacher' | 'student' | 'parent';
+export type ApplicationRole = 'admin' | 'school_admin' | 'bursar' | 'teacher' | 'student' | 'parent';
 
 export type RouteContext = {
   pathname: string;
@@ -9,6 +9,7 @@ export type RouteContext = {
 const PUBLIC_ROUTE_PREFIXES = ['/', '/login', '/forgot-password', '/signup'];
 const ROLE_RESTRICTED_ROUTES: ReadonlyArray<{ prefix: string; allowedRoles: readonly ApplicationRole[] }> = [
   { prefix: '/dashboards/school-admin', allowedRoles: ['admin', 'school_admin'] },
+  { prefix: '/dashboards/finance', allowedRoles: ['admin', 'school_admin', 'bursar'] },
   { prefix: '/dashboards/teacher', allowedRoles: ['admin', 'teacher'] },
   { prefix: '/dashboards/student', allowedRoles: ['student'] },
   { prefix: '/dashboards/parent', allowedRoles: ['parent'] },
@@ -22,6 +23,7 @@ export function isPublicRoute(pathname: string): boolean {
 
 export function getDashboardPathForRole(role: unknown): string {
   if (role === 'admin' || role === 'school_admin') return '/dashboards/school-admin';
+  if (role === 'bursar') return '/dashboards/finance';
   if (role === 'teacher') return '/dashboards/teacher';
   if (role === 'student') return '/dashboards/student';
   if (role === 'parent') return '/dashboards/parent';
@@ -31,7 +33,7 @@ export function getDashboardPathForRole(role: unknown): string {
 
 export function getRoles(payload: Record<string, unknown>): ApplicationRole[] {
   const roleClaims = [payload.role, payload.roles, payload['x-hasura-allowed-roles']];
-  const applicationRoles: ApplicationRole[] = ['admin', 'school_admin', 'teacher', 'student', 'parent'];
+  const applicationRoles: ApplicationRole[] = ['admin', 'school_admin', 'bursar', 'teacher', 'student', 'parent'];
 
   return roleClaims.flatMap((claim) => {
     const values = Array.isArray(claim) ? claim : typeof claim === 'string' ? [claim] : [];

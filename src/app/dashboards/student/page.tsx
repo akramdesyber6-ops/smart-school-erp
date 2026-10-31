@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, BookOpen, CalendarCheck, GraduationCap, RefreshCw, User } from 'lucide-react';
 import useAuthStore, { type AuthProfile, type AuthSession } from '@/lib/stores/useAuthStore';
 import { supabase } from '@/lib/supabase/api';
+import { formatUgx } from '@/lib/finance/financeUtils';
 
 type StudentRecord = {
   id: string;
@@ -33,6 +34,17 @@ type MarkRecord = {
   academic_terms: { name: string } | null;
 };
 
+type FeeBalanceRecord = {
+  id: string;
+  invoice_number: string;
+  term_name: string;
+  due_date: string | null;
+  status: string;
+  total_amount: number;
+  paid_amount: number;
+  balance: number;
+};
+
 type AttendanceRecord = {
   id: string;
   date: string;
@@ -48,6 +60,7 @@ export default function StudentDashboard(): JSX.Element {
   const [enrollments, setEnrollments] = useState<EnrollmentRecord[]>([]);
   const [marks, setMarks] = useState<MarkRecord[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [feeBalances, setFeeBalances] = useState<FeeBalanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -97,6 +110,7 @@ export default function StudentDashboard(): JSX.Element {
         setEnrollments([]);
         setMarks([]);
         setAttendance([]);
+        setFeeBalances([]);
         return;
       }
 
@@ -130,10 +144,21 @@ export default function StudentDashboard(): JSX.Element {
 
       if (attendanceError) throw attendanceError;
 
+      const { data: feeRows, error: feesError } = await supabase
+        .from('student_invoice_balances')
+        .select('id, invoice_number, term_name, due_date, status, total_amount, paid_amount, balance')
+        .eq('student_id', studentRow.id)
+        .eq('school_id', studentRow.school_id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (feesError) throw feesError;
+
       setStudent(studentRow as StudentRecord);
       setEnrollments((enrollmentRows ?? []) as unknown as EnrollmentRecord[]);
       setMarks((markRows ?? []) as unknown as MarkRecord[]);
       setAttendance((attendanceRows ?? []) as unknown as AttendanceRecord[]);
+      setFeeBalances((feeRows ?? []) as FeeBalanceRecord[]);
     } catch {
       setError('Student records could not be loaded. Confirm that the latest Supabase migrations are applied, then try again or contact the school administrator.');
     } finally {
@@ -226,6 +251,35 @@ export default function StudentDashboard(): JSX.Element {
                   <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-sm capitalize text-slate-700">{item.status}</span>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border bg-white shadow-sm" aria-labelledby="fees-heading">
+          <div className="border-b px-5 py-4 sm:px-6">
+            <h2 id="fees-heading" className="text-lg font-semibold text-slate-900">My fee balances</h2>
+            <p className="mt-1 text-sm text-slate-500">A read-only view of invoices and payments recorded by your school.</p>
+          </div>
+          {feeBalances.length === 0 ? <EmptyState message="No fee invoices are linked to your student record yet." /> : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr><th className="px-5 py-3 font-semibold">Invoice</th><th className="px-5 py-3 font-semibold">Term</th><th className="px-5 py-3 font-semibold">Total</th><th className="px-5 py-3 font-semibold">Paid</th><th className="px-5 py-3 font-semibold">Balance</th><th className="px-5 py-3 font-semibold">Due date</th><th className="px-5 py-3 font-semibold">Status</th></tr>
+                </thead>
+                <tbody className="divide-y">
+                  {feeBalances.map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td className="px-5 py-3 text-sm font-semibold text-indigo-700">{invoice.invoice_number}</td>
+                      <td className="px-5 py-3 text-sm text-slate-600">{invoice.term_name}</td>
+                      <td className="px-5 py-3 text-sm text-slate-700">{formatUgx(invoice.total_amount)}</td>
+                      <td className="px-5 py-3 text-sm text-emerald-700">{formatUgx(invoice.paid_amount)}</td>
+                      <td className="px-5 py-3 text-sm font-bold text-slate-900">{formatUgx(invoice.balance)}</td>
+                      <td className="px-5 py-3 text-sm text-slate-600">{invoice.due_date ?? '—'}</td>
+                      <td className="px-5 py-3 text-sm capitalize text-slate-700">{invoice.status.replace(/_/g, ' ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
