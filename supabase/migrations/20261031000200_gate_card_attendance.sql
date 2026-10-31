@@ -44,7 +44,6 @@ create table public.student_gate_cards (
   created_at timestamptz not null default timezone('utc', now()),
   revoked_at timestamptz,
   revoked_by uuid,
-  unique (school_id, card_uid),
   unique (id, school_id),
   foreign key (student_id, school_id)
     references public.students(id, school_id) on delete restrict,
@@ -57,6 +56,10 @@ create table public.student_gate_cards (
   check ((is_active and revoked_at is null and revoked_by is null)
     or (not is_active and revoked_at is not null and revoked_by is not null))
 );
+
+create unique index student_gate_cards_school_uid_active_idx
+  on public.student_gate_cards(school_id, card_uid)
+  where is_active;
 
 create index student_gate_cards_student_idx
   on public.student_gate_cards(school_id, student_id)
