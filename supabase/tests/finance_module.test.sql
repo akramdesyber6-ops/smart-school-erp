@@ -97,7 +97,7 @@ create temporary table finance_test_ids (
   invoice_id uuid,
   payment_id uuid
 );
-grant insert, select on finance_test_ids to authenticated;
+grant insert, select, update on finance_test_ids to authenticated;
 
 -- Exercise invoice and payment RPCs as a real authenticated bursar.
 set local role authenticated;
