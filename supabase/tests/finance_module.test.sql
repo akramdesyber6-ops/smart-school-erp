@@ -142,15 +142,14 @@ begin
 end;
 $$;
 
-insert into pg_temp.finance_test_ids(payment_id)
-select public.record_fee_payment(
+update pg_temp.finance_test_ids
+set payment_id = public.record_fee_payment(
   invoice_id,
   25000,
   'cash',
   'RLS-FINANCE-TEST-001',
   'f20e8400-e29b-41d4-a716-446655440098'::uuid
 )
-from pg_temp.finance_test_ids
 where invoice_id is not null;
 
 insert into pg_temp.finance_test_results(case_key, value_numeric)
