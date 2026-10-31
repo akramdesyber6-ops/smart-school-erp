@@ -48,7 +48,7 @@ create table public.fee_structures (
   foreign key (category_id, school_id)
     references public.fee_categories(id, school_id) on delete restrict,
   foreign key (created_by, school_id)
-    references public.profiles(id, school_id) on delete set null,
+    references public.profiles(id, school_id) on delete restrict,
   check (length(btrim(name)) > 0)
 );
 
@@ -326,7 +326,7 @@ declare
   v_selected_count integer;
 begin
   v_school_id := policies.current_school_id();
-  if auth.uid() is null or not policies.can_manage_finance(v_school_id) then
+  if auth.uid() is null or v_school_id is null or not coalesce(policies.can_manage_finance(v_school_id), false) then
     raise exception 'Finance operator access is required'
       using errcode = '42501';
   end if;
@@ -441,7 +441,7 @@ declare
   v_profile_id uuid;
   v_student_id uuid;
   v_invoice_status text;
-  v_existing_payment_id uuid;
+  v_existing_payment public.fee_payments%rowtype;
   v_total numeric(14,2);
   v_paid numeric(14,2);
   v_balance numeric(14,2);
@@ -449,7 +449,7 @@ declare
   v_receipt_number text;
 begin
   v_school_id := policies.current_school_id();
-  if auth.uid() is null or not policies.can_manage_finance(v_school_id) then
+  if auth.uid() is null or v_school_id is null or not coalesce(policies.can_manage_finance(v_school_id), false) then
     raise exception 'Finance operator access is required'
       using errcode = '42501';
   end if;
@@ -484,13 +484,27 @@ begin
       using errcode = 'P0002';
   end if;
 
-  select p.id into v_existing_payment_id
+  select * into v_existing_payment
   from public.fee_payments p
   where p.school_id = v_school_id
     and p.idempotency_key = target_idempotency_key;
 
-  if v_existing_payment_id is not null then
-    return v_existing_payment_id;
+  if v_existing_payment.id is not null then
+    if v_existing_payment.student_id is distinct from v_student_id
+       or v_existing_payment.amount is distinct from target_amount
+       or v_existing_payment.payment_method is distinct from target_payment_method
+       or v_existing_payment.reference is distinct from nullif(btrim(target_reference), '')
+       or not exists (
+         select 1 from public.fee_payment_allocations a
+         where a.payment_id = v_existing_payment.id
+           and a.invoice_id = target_invoice_id
+           and a.amount = target_amount
+           and a.school_id = v_school_id
+       ) then
+      raise exception 'This idempotency key was already used for a different payment request'
+        using errcode = '23505';
+    end if;
+    return v_existing_payment.id;
   end if;
 
   if v_invoice_status = 'cancelled' then
