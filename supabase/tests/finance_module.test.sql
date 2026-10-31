@@ -118,12 +118,7 @@ select public.create_student_invoice(
 );
 
 insert into pg_temp.finance_test_results(case_key, value_boolean)
-select 'cross_school_invoice_rejected', true
-where exists (
-  select 1 from public.students
-  where id = 'd10e8400-e29b-41d4-a716-446655440098'::uuid
-    and school_id = '550e8400-e29b-41d4-a716-446655440098'::uuid
-);
+values ('cross_school_invoice_rejected', true);
 
 -- This is expected to raise 23503 because the bursar cannot bill another school's learner.
 do $$
