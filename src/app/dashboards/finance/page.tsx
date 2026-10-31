@@ -15,7 +15,7 @@ import {
   FileText,
   Loader2,
   Plus,
-  ReceiptText,
+  FileText,
   RefreshCw,
   Search,
   Wallet,
@@ -102,12 +102,6 @@ const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
 const secondaryButtonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
-
-function localDate(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset();
-  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
 
 function displayDate(value: string | null): string {
   if (!value) return 'Not set';
@@ -587,7 +581,7 @@ export default function FinanceDashboard(): JSX.Element {
                   <h2 className="mt-1 text-lg font-bold text-slate-900">Issue student invoice</h2>
                   <p className="mt-1 text-sm text-slate-500">Only fee items matching the student’s class and term can be selected.</p>
                 </div>
-                <span className="rounded-xl bg-violet-50 p-2.5 text-violet-700"><ReceiptText className="h-5 w-5" /></span>
+                <span className="rounded-xl bg-violet-50 p-2.5 text-violet-700"><FileText className="h-5 w-5" /></span>
               </div>
 
               <form onSubmit={issueInvoice} className="space-y-4">
@@ -713,7 +707,7 @@ export default function FinanceDashboard(): JSX.Element {
                   <h2 className="text-lg font-bold text-slate-900">Recent receipts</h2>
                   <p className="mt-1 text-sm text-slate-500">Latest payments recorded for this school.</p>
                 </div>
-                <span className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700"><ReceiptText className="h-5 w-5" /></span>
+                <span className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700"><FileText className="h-5 w-5" /></span>
               </div>
               {payments.length === 0 ? (
                 <EmptyState text="No payments have been recorded yet." />
@@ -840,7 +834,7 @@ function SummaryCard({
 function EmptyState({ text }: { text: string }): JSX.Element {
   return (
     <div className="flex flex-col items-center justify-center py-5 text-center">
-      <span className="mb-3 rounded-xl bg-slate-100 p-3 text-slate-500"><ReceiptText className="h-5 w-5" /></span>
+      <span className="mb-3 rounded-xl bg-slate-100 p-3 text-slate-500"><FileText className="h-5 w-5" /></span>
       <p className="text-sm text-slate-500">{text}</p>
     </div>
   );
