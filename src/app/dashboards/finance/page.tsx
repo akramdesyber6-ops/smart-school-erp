@@ -124,7 +124,7 @@ function statusClasses(status: InvoiceStatus): string {
 }
 
 function humanStatus(status: string): string {
-  return status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (letter: string) => letter.toUpperCase());
 }
 
 export default function FinanceDashboard(): JSX.Element {
