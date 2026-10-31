@@ -15,7 +15,7 @@ test('known roles map only to their existing dashboards', () => {
   assert.equal(getDashboardPathForRole('teacher'), '/dashboards/teacher');
   assert.equal(getDashboardPathForRole('student'), '/dashboards/student');
   assert.equal(getDashboardPathForRole('parent'), '/dashboards/parent');
-  assert.equal(getDashboardPathForRole('bursar'), '/');
+  assert.equal(getDashboardPathForRole('bursar'), '/dashboards/finance');
   assert.equal(getDashboardPathForRole(undefined), '/');
 });
 
@@ -25,6 +25,10 @@ test('route-role policy blocks cross-role dashboard access', () => {
   assert.equal(canAccessRoute(['parent'], '/dashboards/student'), false);
   assert.equal(canAccessRoute(['teacher'], '/dashboards/school-admin'), false);
   assert.equal(canAccessRoute(['school_admin'], '/dashboards/school-admin/accounts'), true);
+  assert.equal(canAccessRoute(['bursar'], '/dashboards/finance'), true);
+  assert.equal(canAccessRoute(['bursar'], '/dashboards/school-admin'), false);
+  assert.equal(canAccessRoute(['teacher'], '/dashboards/finance'), false);
+  assert.equal(canAccessRoute(['school_admin'], '/dashboards/finance'), true);
   assert.equal(canAccessRoute(['teacher'], '/dashboards/teacher/attendance'), true);
   assert.equal(canAccessRoute([], '/login'), true);
 });
@@ -40,10 +44,10 @@ test('public route matching does not accidentally make similarly prefixed routes
 test('role claims are reduced to recognized application roles', () => {
   const roles = getRoles({
     role: 'student',
-    roles: ['parent', 'super_admin', 'teacher'],
+    roles: ['parent', 'super_admin', 'teacher', 'bursar'],
     'x-hasura-allowed-roles': ['school_admin', 12, null],
   });
-  assert.deepEqual(roles, ['student', 'parent', 'teacher', 'school_admin'] satisfies ApplicationRole[]);
+  assert.deepEqual(roles, ['student', 'parent', 'teacher', 'bursar', 'school_admin'] satisfies ApplicationRole[]);
 });
 
 test('authenticated users are redirected to role dashboards from login and landing pages', async () => {
@@ -54,6 +58,10 @@ test('authenticated users are redirected to role dashboards from login and landi
   assert.equal(
     await processSecureRedirects({ role: 'parent' }, { pathname: '/' }),
     '/dashboards/parent'
+  );
+  assert.equal(
+    await processSecureRedirects({ role: 'bursar' }, { pathname: '/login' }),
+    '/dashboards/finance'
   );
   assert.equal(
     await processSecureRedirects({ role: 'unrecognized' }, { pathname: '/login' }),
