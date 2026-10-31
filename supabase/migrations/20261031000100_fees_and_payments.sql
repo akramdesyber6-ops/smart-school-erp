@@ -514,6 +514,11 @@ begin
     and p.idempotency_key = target_idempotency_key;
 
   if v_existing_payment.id is not null then
+    if v_existing_payment.status <> 'posted' then
+      raise exception 'This idempotency key belongs to a payment that has already been reversed'
+        using errcode = '23514';
+    end if;
+
     if v_existing_payment.student_id is distinct from v_student_id
        or v_existing_payment.amount is distinct from target_amount
        or v_existing_payment.payment_method is distinct from target_payment_method
