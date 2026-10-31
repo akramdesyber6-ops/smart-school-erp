@@ -91,7 +91,7 @@ create temporary table finance_test_results (
   value_text text,
   value_boolean boolean
 );
-grant insert, select on finance_test_results to authenticated;
+grant insert, select, update on finance_test_results to authenticated;
 
 create temporary table finance_test_ids (
   invoice_id uuid,
@@ -103,11 +103,10 @@ grant insert, select on finance_test_ids to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c20e8400-e29b-41d4-a716-446655440098', true);
 
-select ok(
+insert into pg_temp.finance_test_results(case_key, value_boolean)
+select 'bursar_scope',
   policies.can_manage_finance('550e8400-e29b-41d4-a716-446655440001'::uuid)
-  and not policies.can_manage_finance('550e8400-e29b-41d4-a716-446655440098'::uuid),
-  'a bursar can manage finance only inside their own school'
-);
+  and not policies.can_manage_finance('550e8400-e29b-41d4-a716-446655440098'::uuid);
 
 insert into pg_temp.finance_test_ids(invoice_id)
 select public.create_student_invoice(
@@ -237,6 +236,11 @@ select extensions.is(
   (select value_numeric from finance_test_results where case_key = 'reversed_payment_balance'),
   100000::numeric,
   'reversing a receipt restores the outstanding invoice balance'
+);
+
+select extensions.ok(
+  (select value_boolean from finance_test_results where case_key = 'bursar_scope'),
+  'a bursar can manage finance only inside their own school'
 );
 
 select extensions.ok(
