@@ -275,7 +275,7 @@ export default function StudentDashboard(): JSX.Element {
                       <td className="px-5 py-3 text-sm text-emerald-700">{formatUgx(invoice.paid_amount)}</td>
                       <td className="px-5 py-3 text-sm font-bold text-slate-900">{formatUgx(invoice.balance)}</td>
                       <td className="px-5 py-3 text-sm text-slate-600">{invoice.due_date ?? '—'}</td>
-                      <td className="px-5 py-3 text-sm capitalize text-slate-700">{invoice.status.replaceAll('_', ' ')}</td>
+                      <td className="px-5 py-3 text-sm capitalize text-slate-700">{invoice.status.replace(/_/g, ' ')}</td>
                     </tr>
                   ))}
                 </tbody>
