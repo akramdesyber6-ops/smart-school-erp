@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, FileText, Loader2, Printer, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase/api';
-import useAuthStore from '@/lib/stores/useAuthStore';
 import { formatUgx } from '@/lib/finance/financeUtils';
 
 type ReceiptRecord = {
@@ -59,7 +58,6 @@ function formatDate(value: string): string {
 export default function FinanceReceiptPage(): JSX.Element {
   const params = useParams<{ paymentId: string }>();
   const router = useRouter();
-  const { profile } = useAuthStore();
   const [receipt, setReceipt] = useState<ReceiptRecord | null>(null);
   const [allocations, setAllocations] = useState<AllocationRecord[]>([]);
   const [school, setSchool] = useState<SchoolRecord | null>(null);
