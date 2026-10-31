@@ -146,3 +146,17 @@ distinct teacher/admin, assigned/unassigned teacher, student, and parent account
 to verify that users cannot read or mutate another school's rows. Also verify that non-admin users receive no rows from
 `parents` and `student_parents`, while same-school admins can manage them. Do not
 run reset/destructive test commands against production.
+
+
+## Subsequent finance branch extension
+
+The branch `feat/erp-fees-and-payments` adds a first finance implementation beyond the original main-branch audit above:
+
+- A `bursar` role and finance route; it does not introduce a platform-wide super-admin.
+- Fee categories and fee structures scoped by school, academic year, term and class.
+- Transactional student invoices and line items, with the database validating the student's active enrollment against the selected class/term fee structures.
+- A payment ledger with receipt numbers, school-scoped idempotency keys, invoice allocations, partial/full balances and audited reversals.
+- Immutable posted payment facts, a `security_invoker` invoice balance view, explicit Data API grants, and RLS on all six finance tables.
+- A finance workspace, school-scoped printable receipts, read-only student/parent balance displays, and a reversal control requiring a reason.
+
+This is a source/CI-backed extension, not proof that the migration has been deployed to a live school database. The migration and pgTAP test are `supabase/migrations/20261031000100_fees_and_payments.sql` and `supabase/tests/finance_module.test.sql`. Remaining finance work includes discounts/waivers, multi-invoice allocation, invoice adjustment/cancellation, exports/arrears reporting, reconciliation and external payment-provider webhooks. See `docs/FINANCE_MODULE.md` for RPCs, role boundaries and safe application steps.
