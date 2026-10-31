@@ -15,8 +15,9 @@ The working baseline already contains:
 - Initial tenant schema, RLS policies, profile guards, assignment integrity checks, and attendance/markbook audit attribution.
 - A first tenant-scoped finance ledger with fee categories/structures, student invoices, partial/full payments, unique receipt numbers, audited reversals, UGX balances and printable receipts.
 - A separate bursar role and finance route with school-scoped access; student and linked-parent portals can read their own invoice balances.
+- A first gate-card event layer: school-scoped reader credentials, student card registry, signed device ingestion, immutable entry/exit events, duplicate protection, revocation controls and a school-admin management workspace.
 
-The current role model is `admin`, `school_admin`, `bursar`, `teacher`, `student`, and `parent`. A distinct platform super-admin is not yet implemented. Gate-device events, school timetables and the complete term report-card workflow are still outstanding.
+The current role model is `admin`, `school_admin`, `bursar`, `teacher`, `student`, and `parent`. A distinct platform super-admin is not yet implemented. Gate hardware firmware, notifications, automatic campus-presence reconciliation, school timetables and the complete term report-card workflow are still outstanding.
 
 ## Visual system
 
@@ -80,15 +81,23 @@ Add:
 
 ### 4. Gate attendance and learner movement
 
-Extend daily attendance with a separate event-based gate register:
+**Status:** First gate-card backend and school-admin setup workspace delivered on `feat/gate-card-attendance`. Database integration verification is pending; no live database was changed.
 
-- Card/QR identifier mapped to a valid student within the active school.
-- Arrival and departure events with device, timestamp, direction and event identifier.
-- Duplicate-event protection and an auditable correction workflow.
-- Admin view of present-on-campus, late arrivals, early departures and missing departures.
-- Parent notification events for each configured arrival/departure event.
+Implemented in this first slice:
+- School-scoped gate readers provisioned by a school-admin RPC. A random bearer token is shown once; only its SHA-256 hash is stored.
+- Student card registry with same-school validation and audited card revocation.
+- Server-side `POST /api/gate/events` ingestion. A reader supplies a card UID, not a student ID; the server resolves the active student inside the reader's school.
+- Immutable entry/exit events, reader and server timestamps, unique per-device event IDs, retry deduplication and conflicting replay detection.
+- School-admin workspace to create/revoke readers, assign/deactivate cards and review today's events.
 
-**Security requirements:** gate devices must authenticate to a server-side ingestion endpoint; never accept arbitrary student IDs from a public client; validate device-to-school assignment; store a unique device event ID; keep the raw event trail separate from editable class attendance.
+Still required before calling gate attendance complete:
+- Firmware and field verification for the actual RFID readers and card format in use.
+- Device health/heartbeat, offline queue telemetry and alerting.
+- Campus-presence reconciliation, duplicate entry/exit warnings, missing-departure and early-departure reports.
+- A permissioned correction workflow that preserves the original scan event.
+- Gate event history in student/parent portals and opt-in arrival/departure notifications through the notification outbox.
+
+**Security requirements:** gate devices authenticate to a server-side endpoint; arbitrary student IDs are never accepted from a public client; device-to-school assignment is validated; secrets are hashed and server-only; one unique device event ID is enforced by the database; raw events remain separate from editable class attendance.
 
 ### 5. Notifications and communication
 
