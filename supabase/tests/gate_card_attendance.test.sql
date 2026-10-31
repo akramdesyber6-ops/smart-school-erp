@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(7);
+select extensions.plan(8);
 
 insert into public.schools (id, name, emis_code)
 values
@@ -162,6 +162,38 @@ select ok(
      on f.device_id = e.gate_device_id
    where e.device_event_id = 'device-event-unique-001'),
   'The database enforces one event per device event ID'
+);
+
+-- Revocation and event insertion serialize through the trigger's row lock.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'c20e8400-e29b-41d4-a716-446655440200', true);
+select public.revoke_gate_device((select device_id from pg_temp.gate_test_fixture limit 1));
+reset role;
+
+do $
+declare
+  v_rejected boolean := false;
+begin
+  begin
+    insert into public.gate_events (
+      school_id, gate_device_id, card_id, student_id,
+      device_event_id, event_type, occurred_at
+    )
+    select school_id, device_id, card_id, student_id,
+      'device-event-after-revoke', 'exit', timezone('utc', now())
+    from pg_temp.gate_test_fixture;
+  exception when sqlstate '23514' then
+    v_rejected := true;
+  end;
+
+  insert into pg_temp.gate_test_result(case_key, value_boolean)
+  values ('revoked_device_rejected', v_rejected);
+end;
+$;
+
+select extensions.ok(
+  (select value_boolean from pg_temp.gate_test_result where case_key = 'revoked_device_rejected'),
+  'The database rejects new scans after a gate reader is revoked'
 );
 
 select * from extensions.finish();
