@@ -15,7 +15,6 @@ import {
   FileText,
   Loader2,
   Plus,
-  FileText,
   RefreshCw,
   Search,
   Wallet,
