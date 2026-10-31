@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - feat/frontend-route-and-roster-fixes
+      - feat/erp-ui-foundation-and-completion-plan
 
 permissions:
   contents: read
