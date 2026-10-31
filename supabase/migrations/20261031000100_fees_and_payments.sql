@@ -660,6 +660,14 @@ begin
     where a.payment_id = target_payment_id
       and a.school_id = v_school_id
   loop
+    -- Use the same invoice lock as payment posting so two concurrent
+    -- receipt/reversal operations cannot calculate a stale balance.
+    perform 1
+    from public.student_invoices i
+    where i.id = v_invoice_id
+      and i.school_id = v_school_id
+    for update;
+
     select coalesce(sum(ii.line_total), 0)::numeric(14,2)
       into v_total
     from public.student_invoice_items ii
