@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertCircle, CheckCircle, Copy, RefreshCw, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase/api';
 
@@ -54,7 +54,6 @@ function startOfLocalDayIso(): string {
 }
 
 export default function GateAttendancePage(): JSX.Element {
-  const [schoolId, setSchoolId] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
   const [devices, setDevices] = useState<GateDevice[]>([]);
   const [cards, setCards] = useState<GateCard[]>([]);
@@ -88,7 +87,6 @@ export default function GateAttendancePage(): JSX.Element {
         throw new Error('Only an active school administrator can manage gate attendance.');
       }
 
-      setSchoolId(profile.school_id);
       const [studentsResult, devicesResult, cardsResult, eventsResult] = await Promise.all([
         supabase.from('students')
           .select('id, first_name, last_name, registration_number')
@@ -144,7 +142,7 @@ export default function GateAttendancePage(): JSX.Element {
     [devices]
   );
 
-  const createDevice = async (event: React.FormEvent<HTMLFormElement>) => {
+  const createDevice = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = deviceName.trim();
     if (!name) {
