@@ -9,6 +9,7 @@ on:
       - main
       - feat/frontend-route-and-roster-fixes
       - feat/erp-ui-foundation-and-completion-plan
+      - feat/erp-fees-and-payments
 
 permissions:
   contents: read
