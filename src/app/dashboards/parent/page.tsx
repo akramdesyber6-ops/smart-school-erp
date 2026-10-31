@@ -164,7 +164,7 @@ export default function ParentDashboard(): JSX.Element {
       let feeRows: FeeBalanceRecord[] = [];
 
       if (childIds.length > 0) {
-        const [enrollmentResult, marksResult, attendanceResult] = await Promise.all([
+        const [enrollmentResult, marksResult, attendanceResult, feesResult] = await Promise.all([
           supabase
             .from('enrollments')
             .select('id, student_id, status, enrollment_date, classes!inner(name,stream), academic_terms!inner(name)')
@@ -324,7 +324,7 @@ export default function ParentDashboard(): JSX.Element {
                             <div key={invoice.id} className="rounded-lg bg-slate-50 p-3">
                               <div className="flex items-center justify-between gap-3">
                                 <p className="text-sm font-semibold text-indigo-700">{invoice.invoice_number}</p>
-                                <span className="text-xs capitalize text-slate-500">{invoice.status.replaceAll('_', ' ')}</span>
+                                <span className="text-xs capitalize text-slate-500">{invoice.status.replace(/_/g, ' ')}</span>
                               </div>
                               <p className="mt-1 text-xs text-slate-500">{invoice.term_name} · Due {invoice.due_date ?? 'not set'}</p>
                               <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
