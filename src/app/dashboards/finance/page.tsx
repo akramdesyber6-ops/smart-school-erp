@@ -724,6 +724,7 @@ export default function FinanceDashboard(): JSX.Element {
                         <div className="shrink-0 text-right">
                           <p className="text-sm font-bold tabular-nums text-slate-900">{formatUgx(payment.amount)}</p>
                           <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${payment.status === 'posted' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{humanStatus(payment.status)}</span>
+                          <Link href={`/dashboards/finance/receipts/${payment.id}`} className="mt-1 block text-xs font-semibold text-indigo-600 hover:text-indigo-800">View / print receipt</Link>
                         </div>
                       </div>
                     );
