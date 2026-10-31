@@ -13,8 +13,10 @@ The working baseline already contains:
 - School-admin and assignment-scoped teacher attendance registers.
 - Parent/student portal invitation and profile-linking workflows.
 - Initial tenant schema, RLS policies, profile guards, assignment integrity checks, and attendance/markbook audit attribution.
+- A first tenant-scoped finance ledger with fee categories/structures, student invoices, partial/full payments, unique receipt numbers, audited reversals, UGX balances and printable receipts.
+- A separate bursar role and finance route with school-scoped access; student and linked-parent portals can read their own invoice balances.
 
-The current role model is `admin`, `school_admin`, `teacher`, `student`, and `parent`. A distinct platform super-admin and bursar role are not yet implemented. The current core schema does not yet include a fees ledger, gate-device event log, school timetable, or complete term report-card workflow.
+The current role model is `admin`, `school_admin`, `bursar`, `teacher`, `student`, and `parent`. A distinct platform super-admin is not yet implemented. Gate-device events, school timetables and the complete term report-card workflow are still outstanding.
 
 ## Visual system
 
@@ -43,14 +45,25 @@ Global theme variables and reusable base component classes live in `src/app/glob
 
 ### 2. Fees and finance
 
-Create a tenant-scoped finance module with:
+<badge>First implementation delivered on `feat/erp-fees-and-payments`; database integration checks are pending.</badge>
 
-- Fee structures by academic year, term, class, and optional fee category.
-- Student invoices/charges, discounts and approved waivers.
-- Payments with receipt numbers, payment date, method, reference and collector.
-- Allocations of payments to outstanding charges, balances, arrears and statements.
-- Printable receipts and class/student balance reports.
-- Bursar access limited to permitted finance workflows; school-admin oversight; student/parent read-only access to their own balances and receipts.
+Implemented in this branch:
+
+- Tenant-scoped fee categories and class/term/year fee structures.
+- Invoices with multiple fee line items, generated invoice references and server-side validation that each selected item matches the student's active class and term.
+- Partial and full payments with a unique receipt number, method, optional transaction reference and school-scoped idempotency key.
+- Immutable posted payment facts; correction is an audited reversal, not a delete or silent amount edit.
+- Invoice totals, paid amounts, outstanding balances and overdue summaries in UGX.
+- Printable, school-scoped receipt page.
+- Bursar finance route and permissions, with school-admin oversight and read-only student/parent balance views.
+
+Still required before calling finance complete:
+
+- Discounts, approved waivers and configurable fee exemptions.
+- Multi-invoice payment allocation and credit balances.
+- Invoice cancellation/editing workflows with audit history and approval controls.
+- Finance exports, class arrears reports, aging reports and reconciliations.
+- Real payment-provider callbacks (mobile money/bank) with signature validation and idempotent webhook processing. The current screen records cash/manual payment entries; it does not claim to collect money from a provider.
 
 **Security and accounting requirements:** preserve an immutable payment/audit trail; never store card secrets; prevent a payment or allocation from being attached to another school's student/invoice; make payment posting idempotent; record reversals instead of silently deleting posted payments. Do not treat a browser-submitted amount or school ID as trusted.
 
