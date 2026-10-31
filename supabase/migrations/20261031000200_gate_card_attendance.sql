@@ -92,6 +92,69 @@ create index gate_events_student_occurred_idx
 create index gate_events_device_received_idx
   on public.gate_events(gate_device_id, received_at desc);
 
+-- Re-check device, card and student state in the same transaction as the insert.
+-- Row locks serialize a scan against a simultaneous device/card revocation.
+create or replace function public.validate_gate_event_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_device_school_id uuid;
+  v_card_school_id uuid;
+  v_card_student_id uuid;
+  v_student_school_id uuid;
+  v_student_active boolean;
+begin
+  select d.school_id
+    into v_device_school_id
+  from public.gate_devices d
+  where d.id = new.gate_device_id
+    and d.school_id = new.school_id
+    and d.is_active = true
+  for share;
+
+  if v_device_school_id is null then
+    raise exception 'Gate device is inactive or does not belong to this school'
+      using errcode = '23514';
+  end if;
+
+  select c.school_id, c.student_id
+    into v_card_school_id, v_card_student_id
+  from public.student_gate_cards c
+  where c.id = new.card_id
+    and c.school_id = new.school_id
+    and c.is_active = true
+  for share;
+
+  if v_card_school_id is null or v_card_student_id is distinct from new.student_id then
+    raise exception 'Student card is inactive or does not match the gate event'
+      using errcode = '23514';
+  end if;
+
+  select s.school_id, s.is_active
+    into v_student_school_id, v_student_active
+  from public.students s
+  where s.id = new.student_id
+    and s.school_id = new.school_id
+  for share;
+
+  if v_student_school_id is null or v_student_active is not true then
+    raise exception 'Student is inactive or does not belong to this school'
+      using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$;
+
+create trigger gate_events_validate_active_identity
+  before insert on public.gate_events
+  for each row execute function public.validate_gate_event_insert();
+
+revoke all on function public.validate_gate_event_insert() from public, anon, authenticated;
+
 -- Issue a device credential once. Only the SHA-256 hash is persisted.
 create or replace function public.create_gate_device(target_name text)
 returns table(device_id uuid, device_code text, device_name text, device_token text)
